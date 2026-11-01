@@ -97,6 +97,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
         MapLibre.getInstance(this); Store.init(this)
+        // Read the cached nearby place index off the main thread; search falls back to the network until it's ready.
+        Thread { PlaceIndex.load(this) }.start()
         setContent { MaterialTheme { App() } }
     }
 }
@@ -182,7 +184,8 @@ fun addStop(name: String, lat: Double, lon: Double) {
     var q by remember { mutableStateOf("") }
     var sugg by remember { mutableStateOf(listOf<Net.Hit>()) }
     val stops by RideState.stops.collectAsState()
-    LaunchedEffect(q) {
+    val idxVer by PlaceIndex.version
+    LaunchedEffect(q, idxVer) {
         delay(300)
         val qq = q.trim().lowercase()
         if (qq.length < 2) { sugg = emptyList(); return@LaunchedEffect }
@@ -196,13 +199,15 @@ fun addStop(name: String, lat: Double, lon: Double) {
         Store.work?.let { if ("work".contains(qq)) add("Work", it.lat, it.lon) }
         RideState.savedPlaces.value.forEach { sp -> if (sp.name.lowercase().contains(qq)) add(sp.name, sp.lat, sp.lon) }
         RideState.pois.value.forEach { p -> if (p.name.lowercase().contains(qq)) add(p.name, p.lat, p.lon) }
+        // Instant results from the cached index of place names within ~200 km (works offline too).
+        PlaceIndex.search(q.trim(), near, 10).forEach { e -> add(e.name, e.lat, e.lon) }
         if (!offlineModeState.value) {
             try {
                 withContext(Dispatchers.IO) { Net.geocodeList(q.trim(), near) }.forEach { r.add(it) }
             } catch (e: Exception) {}
         }
         // Nearest first, so a local match wins over a far-away place with the same name.
-        sugg = r.sortedBy { it.distM }.distinctBy { "%.5f,%.5f".format(it.p.lat, it.p.lon) }.take(6)
+        sugg = r.sortedBy { it.distM }.distinctBy { "%.5f,%.5f".format(it.p.lat, it.p.lon) }.take(8)
     }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -371,6 +376,13 @@ fun scaledTypography(scale: Float): Typography {
                 MapHolder.push()
             }
         }
+    }
+    // Keep a cached index of nearby place names (about 200 km) so search suggestions are instant.
+    // It is built once and rebuilt only when stale or after moving far away.
+    LaunchedEffect(me != null) {
+        val m = RideState.me.value ?: return@LaunchedEffect
+        if (offlineModeState.value) return@LaunchedEffect
+        PlaceIndex.ensure(ctx, P(m.latitude, m.longitude)) { RideState.msg.value = it }
     }
     var locGranted by remember { mutableStateOf(hasLocation(ctx)) }
     val perms = remember {
@@ -1163,6 +1175,26 @@ fun etaSpeed(speed: Float): Float {
             Text("Internet pairing (Firebase, uses mobile data)", Modifier.weight(1f))
             Switch(checked = onlinePair, onCheckedChange = { onlinePair = it; Store.onlinePairing = it; if (RideState.running.value) startRide(ctx) })
         }
+        HorizontalDivider()
+        val idxVer by PlaceIndex.version
+        val idxBuilding by PlaceIndex.isBuilding
+        val idxCount = remember(idxVer) { PlaceIndex.entries.size }
+        val idxMaster = remember(idxVer) { PlaceIndex.masterDone }
+        Text("Nearby place index", fontWeight = FontWeight.Bold)
+        Text(
+            when {
+                idxBuilding -> if (idxMaster) "Refreshing… place names within about 50 km"
+                              else "Building… collecting place names within about 200 km"
+                idxCount == 0 -> "Not built yet — search currently uses the network only"
+                idxMaster -> "$idxCount place names cached within about 200 km (later refreshes cover 50 km)"
+                else -> "$idxCount place names cached so far — master build not finished"
+            }, fontSize = 12.sp
+        )
+        OutlinedButton(enabled = !idxBuilding, onClick = {
+            val m = RideState.me.value
+            if (m == null) RideState.msg.value = "Waiting for a GPS fix to build the place index"
+            else PlaceIndex.build(ctx, P(m.latitude, m.longitude), PlaceIndex.nextRadiusM) { RideState.msg.value = it }
+        }) { Text(when { idxCount == 0 -> "Build place index"; idxMaster -> "Refresh place index (50 km)"; else -> "Continue building index" }) }
         HorizontalDivider()
         Text("Downloaded offline maps", fontWeight = FontWeight.Bold)
         if (regs.isEmpty()) Text("No areas downloaded yet.", fontSize = 12.sp)

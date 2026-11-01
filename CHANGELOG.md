@@ -10,6 +10,11 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.12.0 (versionCode 53)
+- New nearby place index: the app downloads the names of towns, villages, suburbs and localities within about 200 km and caches them on the phone. Searching a place now shows local matches instantly (nearest first) without waiting for the map server, and search still works in offline mode.
+- The master index covers about 200 km, built in small map tiles (nearest first, saved as it goes, and resumed if interrupted). Once the master index is done, later refreshes cover only about 50 km and happen after moving more than 25 km, which is much lighter on the map servers. A full rebuild happens only when the index is older than 30 days.
+- Settings shows how many names are cached, the current range, and a button to build, continue, or refresh the index.
+
 ## 3.11.0 (versionCode 52)
 - During a ride the app now checks the map every 5 seconds and brings the camera back to your current location if it drifted away (for example after panning the map or looking at a saved place).
 
