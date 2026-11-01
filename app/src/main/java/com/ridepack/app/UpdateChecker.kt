@@ -101,15 +101,29 @@ object UpdateChecker {
                 val c = URL(url).openConnection() as HttpURLConnection
                 c.requestMethod = "GET"; c.connectTimeout = 30_000; c.readTimeout = 90_000
                 c.setRequestProperty("User-Agent", "RidePack-Android")
+                c.instanceFollowRedirects = true
+                c.connect()
+                if (c.responseCode != HttpURLConnection.HTTP_OK) {
+                    error.value = "Download failed (HTTP ${c.responseCode})"
+                    return@Thread
+                }
                 FileOutputStream(f).use { o -> c.inputStream.copyTo(o) }
+                // Verify it's a real APK (ZIP magic), not an error page.
+                val magic = f.readBytes().take(4)
+                if (magic.size < 4 || magic[0] != 'P'.code.toByte() || magic[1] != 'K'.code.toByte()) {
+                    error.value = "Downloaded file is not a valid APK"
+                    return@Thread
+                }
                 val uri = androidx.core.content.FileProvider.getUriForFile(ctx, "com.ridepack.app.fileprovider", f)
                 val intent = Intent(Intent.ACTION_VIEW, uri).apply {
                     type = "application/vnd.android.package-archive"
                     addCategory(Intent.CATEGORY_BROWSABLE)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 ctx.startActivity(intent)
             } catch (e: Exception) {
+                Log.e("UpdateChecker", "install failed", e)
                 error.value = "Could not download the update: ${e.message}"
             }
         }.start()

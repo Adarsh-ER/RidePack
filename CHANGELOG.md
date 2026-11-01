@@ -10,6 +10,10 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.19.0 (versionCode 66)
+- Fixed the in-app update download: the installer now receives read permission for the downloaded APK, so the install step works.
+- Verified the APK content before installing.
+
 ## 3.18.0 (versionCode 65)
 - GPS marker now stays on top of the route line.
 - (Other fixes from 3.17.0 carried forward.)
