@@ -10,6 +10,10 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.10.4 (versionCode 50)
+- Fixed the internet rider link: the app now connects to the correct Realtime Database URL (asia-southeast1). Previously it used a default database URL that does not exist, so the internet link could not work.
+- The link now reports a clear message instead of failing silently if the database cannot be reached.
+
 ## 3.10.3 (versionCode 49)
 - Place search now looks near you first and only widens the radius (25 km, then 200 km, then 1000 km, then worldwide) when nothing matches, so a common name no longer jumps to a place thousands of kilometres away.
 - Search results are sorted nearest-first, show the distance from you, and list several matches instead of one.

@@ -32,7 +32,16 @@ class OnlineLink(
         stop()
         // Use the Firebase auth UID as the node key so the rules can verify ownership.
         uid = RideState.firebaseUid ?: FirebaseAuth.getInstance().currentUser?.uid ?: RideState.myId
-        val db = FirebaseDatabase.getInstance()
+        // The database is in asia-southeast1, so the URL must be explicit: google-services.json has no
+        // firebase_url, and the default (us-central1) database does not exist.
+        val db = try {
+            FirebaseDatabase.getInstance(DB_URL)
+        } catch (e: Exception) {
+            try { FirebaseDatabase.getInstance() } catch (e2: Exception) {
+                RideState.msg.value = "Internet link unavailable: ${e2.message}"
+                onState(false); return
+            }
+        }
         ridersRef = db.getReference("rides/$code/riders")
         routesRef = db.getReference("rides/$code/routes")
         sosRef = db.getReference("rides/$code/sos")
@@ -87,5 +96,10 @@ class OnlineLink(
         ridersRef = null; routesRef = null; sosRef = null
         myRiderRef = null; myRouteRef = null
         onState(false)
+    }
+
+    companion object {
+        /** Realtime Database URL for the ridepack-3d413 project (asia-southeast1 region). */
+        const val DB_URL = "https://ridepack-3d413-default-rtdb.asia-southeast1.firebasedatabase.app"
     }
 }
