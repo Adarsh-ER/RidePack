@@ -10,6 +10,10 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.18.0 (versionCode 65)
+- GPS marker now stays on top of the route line.
+- (Other fixes from 3.17.0 carried forward.)
+
 ## 3.17.0 (versionCode 64)
 - Route line now shrinks as the rider travels, so the remaining distance and ETA update correctly.
 - Route line is a thin blue centre line over a road-coloured casing, so the road stays visible.

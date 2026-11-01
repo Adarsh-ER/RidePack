@@ -64,12 +64,12 @@ object MapHolder {
             s.addLayer(SymbolLayer("stops-t", "stops").withProperties(textField(Expression.get("label")), textSize(11f), textColor("#374151"), textFont(arrayOf("Noto Sans Bold"))))
             // Hide the style's 3D building extrusions; only the map itself is tilted.
             s.getLayer("building-3d")?.setProperties(org.maplibre.android.style.layers.PropertyFactory.visibility(org.maplibre.android.style.layers.Property.NONE))
-            // Google-Maps-style blue location dot for "You".
-            s.addLayer(CircleLayer("me-l", "me").withProperties(circleRadius(10f), circleColor("#2563eb"), circleStrokeColor("#ffffff"), circleStrokeWidth(3f)))
             // Destination marker (red) and route preview (blue).
             s.addLayer(CircleLayer("dest-l", "dest").withProperties(circleRadius(10f), circleColor("#ef4444"), circleStrokeColor("#ffffff"), circleStrokeWidth(3f)))
             s.addLayer(LineLayer("preview-casing", "preview").withProperties(lineColor(routeCase), roadWidth(0.5f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
             s.addLayer(LineLayer("preview-l", "preview").withProperties(lineColor(routeMain), roadWidth(0.2f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
+            // Google-Maps-style blue location dot for "You" — added last so it stays on top of every route.
+            s.addLayer(CircleLayer("me-l", "me").withProperties(circleRadius(10f), circleColor("#2563eb"), circleStrokeColor("#ffffff"), circleStrokeWidth(3f)))
             push()
             // Show India until the first fix arrives; once we have a location, push() follows the rider.
             if (!centered && RideState.me.value == null) map?.moveCamera(CameraUpdateFactory.newLatLngZoom(defaultCenter, defaultZoom))
