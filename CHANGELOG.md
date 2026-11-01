@@ -10,6 +10,17 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.10.3 (versionCode 49)
+- Place search now looks near you first and only widens the radius (25 km, then 200 km, then 1000 km, then worldwide) when nothing matches, so a common name no longer jumps to a place thousands of kilometres away.
+- Search results are sorted nearest-first, show the distance from you, and list several matches instead of one.
+- Fixed settings (Night mode, font size/colour, brightness, auto-centre/rotate, 3D, offline) resetting after the app closed; they are now read from storage at first use.
+
+## 3.10.2 (versionCode 48)
+- ETA is now based on a smoothed, floored speed so it stays stable and realistic instead of spiking to large values when GPS speed fluctuates.
+
+## 3.10.1 (versionCode 47)
+- "Add rider by ID" now looks up the rider in the nearby list and pairs with them (joins their ride), instead of only tagging a name.
+
 ## 3.10.0 (versionCode 46)
 - Nearby riders are now discovered automatically and listed in the Pairing tab; tap Pair to join a nearby ride instead of typing a code.
 - The Search button on the map now opens the location search instead of the tab panel.

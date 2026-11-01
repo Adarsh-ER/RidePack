@@ -76,14 +76,14 @@ import kotlin.math.roundToInt
 
 val CAT = linkedMapOf("fuel" to "⛽", "food" to "🍴", "view" to "🏞️", "fix" to "🔧", "stay" to "🛏️")
 
-val darkModeState = mutableStateOf(Store.nightMode)
-val fontSizeState = mutableStateOf(Store.fontSizeScale)
-val fontColorState = mutableStateOf(Store.fontColor)
-val offlineModeState = mutableStateOf(Store.offlineMode)
-val brightnessState = mutableStateOf(Store.brightness)
-val autoCenterState = mutableStateOf(Store.autoCenter)
-val autoRotateState = mutableStateOf(Store.autoRotate)
-val threeDState = mutableStateOf(Store.threeD)
+val darkModeState by lazy { mutableStateOf(Store.nightMode) }
+val fontSizeState by lazy { mutableStateOf(Store.fontSizeScale) }
+val fontColorState by lazy { mutableStateOf(Store.fontColor) }
+val offlineModeState by lazy { mutableStateOf(Store.offlineMode) }
+val brightnessState by lazy { mutableStateOf(Store.brightness) }
+val autoCenterState by lazy { mutableStateOf(Store.autoCenter) }
+val autoRotateState by lazy { mutableStateOf(Store.autoRotate) }
+val threeDState by lazy { mutableStateOf(Store.threeD) }
 val panelExpandedState = mutableStateOf(true)
 val editPlaceKey = mutableStateOf<String?>(null)
 val droppedPin = mutableStateOf<P?>(null)
@@ -91,6 +91,7 @@ val searchOpen = mutableStateOf(false)
 val panelHiddenState = mutableStateOf(false)
 val hideBtnPing = mutableStateOf(0)
 val routeRefreshTick = mutableStateOf(0)
+val smoothSpeedState = mutableStateOf(0f)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(b: Bundle?) {
@@ -179,35 +180,44 @@ fun addStop(name: String, lat: Double, lon: Double) {
 
 @Composable fun SearchCard() {
     var q by remember { mutableStateOf("") }
-    var sugg by remember { mutableStateOf(listOf<Triple<String, Double, Double>>()) }
+    var sugg by remember { mutableStateOf(listOf<Net.Hit>()) }
     val stops by RideState.stops.collectAsState()
     LaunchedEffect(q) {
         delay(300)
         val qq = q.trim().lowercase()
         if (qq.length < 2) { sugg = emptyList(); return@LaunchedEffect }
-        val r = mutableListOf<Triple<String, Double, Double>>()
-        Store.home?.let { if ("home".contains(qq)) r.add(Triple("Home", it.lat, it.lon)) }
-        Store.work?.let { if ("work".contains(qq)) r.add(Triple("Work", it.lat, it.lon)) }
-        RideState.savedPlaces.value.forEach { sp -> if (sp.name.lowercase().contains(qq)) r.add(Triple(sp.name, sp.lat, sp.lon)) }
-        RideState.pois.value.forEach { p -> if (p.name.lowercase().contains(qq)) r.add(Triple(p.name, p.lat, p.lon)) }
+        val near = RideState.me.value?.let { P(it.latitude, it.longitude) }
+        val r = mutableListOf<Net.Hit>()
+        fun add(name: String, lat: Double, lon: Double) {
+            val p = P(lat, lon)
+            r.add(Net.Hit(name, p, near?.let { Geo.dist(it, p) } ?: 0.0))
+        }
+        Store.home?.let { if ("home".contains(qq)) add("Home", it.lat, it.lon) }
+        Store.work?.let { if ("work".contains(qq)) add("Work", it.lat, it.lon) }
+        RideState.savedPlaces.value.forEach { sp -> if (sp.name.lowercase().contains(qq)) add(sp.name, sp.lat, sp.lon) }
+        RideState.pois.value.forEach { p -> if (p.name.lowercase().contains(qq)) add(p.name, p.lat, p.lon) }
         if (!offlineModeState.value) {
             try {
-                val p = withContext(Dispatchers.IO) { Net.geocode(q.trim()) }
-                if (p != null) r.add(Triple(q.trim(), p.lat, p.lon))
+                withContext(Dispatchers.IO) { Net.geocodeList(q.trim(), near) }.forEach { r.add(it) }
             } catch (e: Exception) {}
         }
-        sugg = r.distinctBy { "${it.second},${it.third}" }.take(6)
+        // Nearest first, so a local match wins over a far-away place with the same name.
+        sugg = r.sortedBy { it.distM }.distinctBy { "%.5f,%.5f".format(it.p.lat, it.p.lon) }.take(6)
     }
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             OutlinedTextField(q, { q = it }, label = { Text("Search a place") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = { if (searchOpen.value) IconButton(onClick = { searchOpen.value = false }) { Icon(Icons.Filled.Close, contentDescription = "Close search") } })
-            sugg.forEach { (name, lat, lon) ->
+            sugg.forEach { hit ->
+                val lat = hit.p.lat; val lon = hit.p.lon
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { MapHolder.focus(lat, lon, 15.0) }) {
-                    Text(name, Modifier.weight(1f), fontSize = 13.sp, maxLines = 1)
-                    TextButton(onClick = { addStop(name, lat, lon); q = "" }) { Text("+ Stop") }
-                    TextButton(onClick = { quickDest(name, lat, lon); searchOpen.value = false; q = "" }) { Text("Go") }
+                    Column(Modifier.weight(1f)) {
+                        Text(hit.name, fontSize = 13.sp, maxLines = 1)
+                        if (hit.distM > 0) Text(Geo.fmt(hit.distM) + " away", fontSize = 11.sp, maxLines = 1)
+                    }
+                    TextButton(onClick = { addStop(hit.name, lat, lon); q = "" }) { Text("+ Stop") }
+                    TextButton(onClick = { quickDest(hit.name, lat, lon); searchOpen.value = false; q = "" }) { Text("Go") }
                 }
             }
             if (stops.isNotEmpty()) {
@@ -695,7 +705,7 @@ fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview:
         if (left < 40) return Nav("You've arrived", "", "🏁")
         if (off > 200) return Nav("Off route", "${Geo.fmt(off)} from the route", "⚠️")
         val t = r.turns.firstOrNull { it.s > s + 30 }; val d = (t?.s ?: r.total) - s
-        val speedMs = (me.speed.takeIf { it > 0.5f } ?: (20f / 3.6f))
+        val speedMs = etaSpeed(me.speed)
         val etaSec = (left / speedMs).toInt().coerceAtLeast(0)
         val eta = if (etaSec < 60) "${etaSec}s" else if (etaSec < 3600) "${etaSec / 60}m" else "${etaSec / 3600}h ${(etaSec % 3600) / 60}m"
         return if (t != null) Nav("Turn ${if (t.left) "left" else "right"} in ${Geo.fmt(d)}", "${Geo.fmt(left)} to finish · ETA $eta",
@@ -705,7 +715,7 @@ fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview:
     if (dest != null) {
         val dist = if (preview != null && preview.size >= 2) preview.zipWithNext { a, b -> Geo.dist(a, b) }.sum()
         else Geo.dist(P(me.latitude, me.longitude), dest)
-        val speedMs = (me.speed.takeIf { it > 0.5f } ?: (20f / 3.6f))
+        val speedMs = etaSpeed(me.speed)
         val etaSec = (dist / speedMs).toInt().coerceAtLeast(0)
         val eta = if (etaSec < 60) "${etaSec}s" else if (etaSec < 3600) "${etaSec / 60}m" else "${etaSec / 3600}h ${(etaSec % 3600) / 60}m"
         if (dist < 40) return Nav("You've arrived", "", "🏁", eta)
@@ -713,6 +723,12 @@ fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview:
     }
     if (RideState.running.value) return Nav("Riding", "Follow the road ahead", "🚴")
     return Nav("Ready", "Set a destination or import a GPX", "🧭")
+}
+
+/** Smoothed, floored speed for a stable, realistic ETA (ignores GPS noise and stationary spikes). */
+fun etaSpeed(speed: Float): Float {
+    if (speed > 0.5f) smoothSpeedState.value = smoothSpeedState.value * 0.6f + speed * 0.4f
+    return smoothSpeedState.value.coerceIn(5.5f, 45f)
 }
 
 @Composable fun RoundNavButton(icon: ImageVector, desc: String, onClick: () -> Unit) {
@@ -938,10 +954,16 @@ fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview:
                 OutlinedTextField(nm, { nm = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.weight(1f))
             }
             Button(onClick = {
-                if (id.isNotBlank() && nm.isNotBlank()) {
-                    RideState.known[id.trim().uppercase()] = nm.trim(); Store.saveKnown()
-                    RideState.msg.value = "${nm.trim()} will be tagged when ${id.trim().uppercase()} connects"; id = ""; nm = ""
+                val rid = id.trim().uppercase()
+                if (rid.isBlank()) { RideState.msg.value = "Enter a rider ID"; return@Button }
+                if (nm.isNotBlank()) { RideState.known[rid] = nm.trim(); Store.saveKnown() }
+                val nr = nearby.firstOrNull { it.id.equals(rid, ignoreCase = true) }
+                when {
+                    nr == null -> RideState.msg.value = "Rider $rid not found nearby (must be in Bluetooth range)"
+                    nr.code.isEmpty() -> RideState.msg.value = "Rider $rid is not in a ride yet"
+                    else -> { join(nr.code); RideState.msg.value = "Pairing with ${nm.ifBlank { "Rider $rid" }}" }
                 }
+                id = ""; nm = ""
             }) { Text("Add rider by ID") }
         }
     }

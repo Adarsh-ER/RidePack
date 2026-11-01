@@ -12,12 +12,46 @@ object Net {
         c.setRequestProperty("User-Agent", "RidePack/0.1"); c.connectTimeout = 15000; c.readTimeout = 30000
         return c
     }
-    fun geocode(q: String): P? {
-        if (offlineModeState.value) return null
-        val t = open("https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + URLEncoder.encode(q, "UTF-8"))
-            .inputStream.bufferedReader().use { it.readText() }
-        val a = JSONArray(t); if (a.length() == 0) return null
-        return P(a.getJSONObject(0).getString("lat").toDouble(), a.getJSONObject(0).getString("lon").toDouble())
+    /** One place search result: a readable name, its position and the distance from the rider (0 when unknown). */
+    data class Hit(val name: String, val p: P, val distM: Double = 0.0)
+
+    fun geocode(q: String, near: P? = null): P? = geocodeList(q, near, 1).firstOrNull()?.p
+
+    /**
+     * Places matching [q], nearest to [near] first.
+     * Searches a small radius around the rider and only widens (25 km -> 200 km -> 1000 km -> worldwide)
+     * when nothing is found, so a common name does not resolve to a place thousands of kilometres away.
+     */
+    fun geocodeList(q: String, near: P? = null, limit: Int = 6): List<Hit> {
+        if (offlineModeState.value) return emptyList()
+        val qq = URLEncoder.encode(q, "UTF-8")
+        val rings: List<Double?> = if (near == null) listOf(null) else listOf(0.25, 2.0, 10.0, null)
+        for (ring in rings) {
+            val url = buildString {
+                append("https://nominatim.openstreetmap.org/search?format=json&limit=10&q=").append(qq)
+                if (near != null && ring != null) {
+                    append("&viewbox=").append("%.4f,%.4f,%.4f,%.4f".format(near.lon - ring, near.lat - ring, near.lon + ring, near.lat + ring))
+                    append("&bounded=1")
+                }
+            }
+            val hits = try { parseHits(url) } catch (e: Exception) { emptyList() }
+            if (hits.isNotEmpty()) {
+                val sorted = if (near == null) hits else hits.sortedBy { Geo.dist(near, it.p) }
+                return sorted.take(limit).map { if (near == null) it else it.copy(distM = Geo.dist(near, it.p)) }
+            }
+        }
+        return emptyList()
+    }
+
+    private fun parseHits(url: String): List<Hit> {
+        val t = open(url).inputStream.bufferedReader().use { it.readText() }
+        val a = JSONArray(t)
+        return (0 until a.length()).map { i ->
+            val o = a.getJSONObject(i)
+            val p = P(o.getString("lat").toDouble(), o.getString("lon").toDouble())
+            val short = o.optString("display_name").split(", ").filter { it.isNotBlank() }.take(3).joinToString(", ")
+            Hit(short, p)
+        }
     }
     private val routers = listOf("https://router.project-osrm.org", "https://routing.openstreetmap.de/routed-car")
     /** Road route from the first router that answers. Null when no router can give a road route. */
