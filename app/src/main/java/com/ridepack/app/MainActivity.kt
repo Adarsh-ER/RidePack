@@ -87,6 +87,7 @@ val threeDState = mutableStateOf(Store.threeD)
 val panelExpandedState = mutableStateOf(true)
 val editPlaceKey = mutableStateOf<String?>(null)
 val droppedPin = mutableStateOf<P?>(null)
+val searchOpen = mutableStateOf(false)
 val panelHiddenState = mutableStateOf(false)
 val hideBtnPing = mutableStateOf(0)
 val routeRefreshTick = mutableStateOf(0)
@@ -200,18 +201,19 @@ fun addStop(name: String, lat: Double, lon: Double) {
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f))) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             OutlinedTextField(q, { q = it }, label = { Text("Search a place") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) })
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = { if (searchOpen.value) IconButton(onClick = { searchOpen.value = false }) { Icon(Icons.Filled.Close, contentDescription = "Close search") } })
             sugg.forEach { (name, lat, lon) ->
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { MapHolder.focus(lat, lon, 15.0) }) {
                     Text(name, Modifier.weight(1f), fontSize = 13.sp, maxLines = 1)
                     TextButton(onClick = { addStop(name, lat, lon); q = "" }) { Text("+ Stop") }
-                    TextButton(onClick = { quickDest(name, lat, lon); q = "" }) { Text("Go") }
+                    TextButton(onClick = { quickDest(name, lat, lon); searchOpen.value = false; q = "" }) { Text("Go") }
                 }
             }
             if (stops.isNotEmpty()) {
                 Text("Stops: " + stops.joinToString(" > ") { it.name }, fontSize = 12.sp, maxLines = 2)
                 val ctx = LocalContext.current
-                Button(onClick = { setRide(ctx) }, modifier = Modifier.fillMaxWidth()) { Text("Set ride") }
+                Button(onClick = { setRide(ctx); searchOpen.value = false }, modifier = Modifier.fillMaxWidth()) { Text("Set ride") }
             }
         }
     }
@@ -297,6 +299,7 @@ fun scaledTypography(scale: Float): Typography {
     var showSos by remember { mutableStateOf(false) }
     var hideBtnShown by remember { mutableStateOf(true) }
     var askRejoin by remember { mutableStateOf(false) }
+    var showSetup by remember { mutableStateOf(!Store.setupDone) }
     val navOn by RideState.destination.collectAsState()
     val darkNow by darkModeState
     LaunchedEffect(landscape, navOn != null) { panelHiddenState.value = landscape || navOn != null }
@@ -349,7 +352,8 @@ fun scaledTypography(scale: Float): Typography {
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { locGranted = hasLocation(ctx) }
     LaunchedEffect(Unit) { launcher.launch(perms) }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(showSetup) {
+        if (showSetup) return@LaunchedEffect
         kotlinx.coroutines.delay(500)
         if (RideState.code.value != null && !RideState.running.value) askRejoin = true
     }
@@ -367,15 +371,20 @@ fun scaledTypography(scale: Float): Typography {
     Column(Modifier.fillMaxSize().systemBarsPadding().background(colorScheme.background)) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             MapPane(Modifier.fillMaxSize(), locGranted); Hud()
-            if (landscape && !panelHiddenState.value && hideBtnShown) FilledTonalButton(onClick = { panelHiddenState.value = true }, modifier = Modifier.align(Alignment.TopEnd).padding(top = 60.dp, end = 8.dp)) {
-                Text("Hide tabs", fontSize = 12.sp)
+            if (landscape && !panelHiddenState.value && hideBtnShown) Box(Modifier.align(Alignment.TopEnd).padding(top = 60.dp, end = 12.dp)) {
+                RoundNavButton(Icons.Filled.Close, "Hide tabs") { panelHiddenState.value = true }
             }
-            if (landscape && panelHiddenState.value) FilledTonalButton(onClick = { panelHiddenState.value = false }, modifier = Modifier.align(Alignment.TopEnd).padding(top = 60.dp, end = 8.dp)) {
-                Text("Tabs", fontSize = 12.sp)
+            if (landscape && panelHiddenState.value) Box(Modifier.align(Alignment.TopEnd).padding(top = 60.dp, end = 12.dp)) {
+                RoundNavButton(Icons.Filled.Menu, "Tabs") { panelHiddenState.value = false }
             }
-            Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = if (dest != null) 110.dp else 80.dp).size(56.dp).interceptTap { recenter(ctx) }, contentAlignment = Alignment.Center) {
-                FloatingActionButton(onClick = {}, containerColor = MaterialTheme.colorScheme.primaryContainer) {
-                    Icon(Icons.Filled.MyLocation, contentDescription = "Recenter", modifier = Modifier.size(24.dp))
+            Box(Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = if (landscape) 16.dp else if (dest != null) 110.dp else 80.dp)) {
+                FloatingActionButton(
+                    onClick = { recenter(ctx) },
+                    containerColor = if (dark) Color(0xFF111418) else MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = if (dark) Color.White else MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.size(52.dp)
+                ) {
+                    Icon(Icons.Filled.MyLocation, contentDescription = "Recenter")
                 }
             }
             FilledTonalButton(onClick = { showSos = true }, modifier = Modifier.align(Alignment.BottomStart).padding(start = 16.dp, bottom = if (dest != null) 110.dp else 10.dp),
@@ -434,6 +443,35 @@ fun scaledTypography(scale: Float): Typography {
                     }) { Text("Add to stops") }
                 },
                 dismissButton = { TextButton(onClick = { droppedPin.value = null }) { Text("Cancel") } }
+            )
+        }
+        if (showSetup) {
+            var nm by remember { mutableStateOf(RideState.myName) }
+            var rg by remember { mutableStateOf(Store.vehicleReg) }
+            AlertDialog(
+                onDismissRequest = {},
+                title = { Text("Welcome to RidePack", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Enter your name and vehicle registration so other riders can identify you.", fontSize = 13.sp)
+                        OutlinedTextField(nm, { nm = it }, label = { Text("Your name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(rg, { rg = it }, label = { Text("Vehicle registration") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters))
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        Store.saveName(nm.ifBlank { "Me" })
+                        Store.vehicleReg = rg.trim()
+                        Store.setupDone = true
+                        RideState.myReg = rg.trim()
+                        showSetup = false
+                        RideState.msg.value = "Profile saved"
+                    }) { Text("Save") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { Store.setupDone = true; showSetup = false }) { Text("Skip") }
+                }
             )
         }
         if (askRejoin) {
@@ -712,7 +750,7 @@ fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview:
     // Landscape has little height: keep the overlay in a narrow top-left column so it doesn't cover the map or the bottom buttons.
     val hudAlign = if (landscape) Alignment.TopStart else Alignment.TopCenter
     Column(Modifier.align(hudAlign).padding(if (landscape) 4.dp else 10.dp).widthIn(max = if (landscape) 280.dp else 600.dp)) {
-        if (dest == null) SearchCard() else Card(Modifier.fillMaxWidth(), colors = if (dest != null) CardDefaults.cardColors(containerColor = Color(0xFF00695C), contentColor = Color.White) else CardDefaults.cardColors()) {
+        if (dest == null || searchOpen.value) SearchCard() else Card(Modifier.fillMaxWidth(), colors = if (dest != null) CardDefaults.cardColors(containerColor = Color(0xFF00695C), contentColor = Color.White) else CardDefaults.cardColors()) {
             Row(Modifier.padding(if (landscape) 4.dp else 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(nav.arrow, fontSize = if (landscape) 18.sp else 28.sp); Spacer(Modifier.width(if (landscape) 6.dp else 10.dp))
                 Column(Modifier.weight(1f)) { Text(nav.title, fontWeight = FontWeight.Bold, fontSize = if (landscape) 13.sp else 17.sp); Text(nav.sub, fontSize = if (landscape) 10.sp else 12.sp)
@@ -743,7 +781,7 @@ fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview:
     val following by MapHolder.follow
     if (!following && dest == null) FilledTonalButton(onClick = { MapHolder.follow.value = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = if (dest != null) 110.dp else 10.dp)) { Text("Follow me") }
     if (dest != null) Column(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        RoundNavButton(Icons.Filled.Search, "Search") { panelHiddenState.value = false; panelExpandedState.value = true }
+        RoundNavButton(Icons.Filled.Search, "Search") { searchOpen.value = true }
         RoundNavButton(Icons.Filled.Refresh, "Refresh route") { routeRefreshTick.value++ }
     }
     if (dest != null) Box(Modifier.align(if (landscape) Alignment.BottomStart else Alignment.BottomCenter).padding(start = if (landscape) 8.dp else 0.dp, bottom = 8.dp)) {
@@ -840,6 +878,7 @@ fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview:
 @Composable fun RidersTab() {
     val ctx = LocalContext.current; val me by RideState.me.collectAsState(); val riders by RideState.riders.collectAsState()
     val code by RideState.code.collectAsState(); val links by RideState.links.collectAsState(); val onlineUp by RideState.onlineUp.collectAsState()
+    val nearby by RideState.nearby.collectAsState()
     val now by produceState(System.currentTimeMillis()) { while (true) { value = System.currentTimeMillis(); delay(1000) } }
     var id by remember { mutableStateOf("") }; var nm by remember { mutableStateOf("") }
     var c by remember { mutableStateOf("") }; var n by remember { mutableStateOf(RideState.myName) }
@@ -862,6 +901,17 @@ fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview:
             OutlinedTextField(n, { n = it }, label = { Text("Your name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(c, { c = it }, label = { Text("Ride code, e.g. RP-7K2Q") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters))
+            val nearbyOthers = nearby.filter { it.id != RideState.myId && it.code.isNotEmpty() && it.code != code }
+            if (nearbyOthers.isNotEmpty()) {
+                HorizontalDivider()
+                Text("Nearby riders (tap to pair)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                nearbyOthers.forEach { nr ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Rider ${nr.id} · Ride ${nr.code}", Modifier.weight(1f), fontSize = 13.sp)
+                        Button(onClick = { join(nr.code) }) { Text("Pair") }
+                    }
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { join(c) }) { Text("Join") }
                 Button(onClick = { val al = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; join("RP-" + (1..4).map { al.random() }.joinToString("")) }) { Text("Create ride") }
@@ -1066,7 +1116,7 @@ fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview:
             Switch(checked = threeD, onCheckedChange = { threeD = it; Store.threeD = it; threeDState.value = it })
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Internet pairing (ntfy.sh, uses mobile data)", Modifier.weight(1f))
+            Text("Internet pairing (Firebase, uses mobile data)", Modifier.weight(1f))
             Switch(checked = onlinePair, onCheckedChange = { onlinePair = it; Store.onlinePairing = it; if (RideState.running.value) startRide(ctx) })
         }
         HorizontalDivider()

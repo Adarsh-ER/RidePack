@@ -10,11 +10,13 @@ class NearbyLink(
     ctx: Context,
     private val onPacket: (String) -> Unit,
     private val onLinks: (Int) -> Unit,
-    private val onError: (String) -> Unit
+    private val onError: (String) -> Unit,
+    private val onDiscovered: (String, String) -> Unit
 ) {
     private val client = Nearby.getConnectionsClient(ctx)
     private val connected: MutableSet<String> = Collections.synchronizedSet(HashSet())
     private var myId = ""
+    private var myCode = ""
 
     private val payloadCb = object : PayloadCallback() {
         override fun onPayloadReceived(ep: String, p: Payload) { p.asBytes()?.let { onPacket(String(it, Charsets.UTF_8)) } }
@@ -27,17 +29,27 @@ class NearbyLink(
     }
     private val disc = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(ep: String, i: DiscoveredEndpointInfo) {
-            // only the smaller rider ID initiates, so two phones never both try at once
-            if (myId < i.endpointName && !connected.contains(ep)) client.requestConnection(myId, ep, life)
+            val parts = i.endpointName.split(":")
+            val rid = parts.getOrNull(0) ?: return
+            val rcode = parts.getOrNull(1) ?: ""
+            when {
+                // Same ride code: connect automatically (smaller rider ID initiates to avoid a double connect).
+                rcode.isNotEmpty() && rcode == myCode -> {
+                    if (myId < rid && !connected.contains(ep)) client.requestConnection(myId, ep, life)
+                }
+                // Different ride (or no ride yet): surface in the "nearby riders" list for manual pairing.
+                else -> onDiscovered(rid, rcode)
+            }
         }
         override fun onEndpointLost(ep: String) {}
     }
 
     fun start(code: String, id: String) {
-        stop(); myId = id; val sid = "com.ridepack.$code" // same ride code = same service ID
-        client.startAdvertising(id, sid, life, AdvertisingOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build())
+        stop(); myId = id; myCode = code
+        val epName = "$id:$code" // endpoint name carries the rider ID and ride code for discovery
+        client.startAdvertising(epName, SID, life, AdvertisingOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build())
             .addOnFailureListener { onError("advertise: ${it.message}") }
-        client.startDiscovery(sid, disc, DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build())
+        client.startDiscovery(SID, disc, DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build())
             .addOnFailureListener { onError("discover: ${it.message}") }
     }
     fun send(s: String) {
@@ -45,4 +57,9 @@ class NearbyLink(
         if (t.isNotEmpty()) client.sendPayload(t, Payload.fromBytes(s.toByteArray(Charsets.UTF_8)))
     }
     fun stop() { client.stopAdvertising(); client.stopDiscovery(); client.stopAllEndpoints(); connected.clear(); onLinks(0) }
+
+    companion object {
+        /** Shared service ID so all nearby RidePack riders discover each other regardless of ride code. */
+        const val SID = "com.ridepack.open"
+    }
 }

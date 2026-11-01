@@ -1,84 +1,91 @@
 package com.ridepack.app
 
-import okhttp3.Call
-import okhttp3.Callback
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
+import com.google.firebase.database.ChildEventListener
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.auth.FirebaseAuth
 import org.json.JSONObject
-import java.io.IOException
-import java.util.concurrent.TimeUnit
 
 /**
- * Internet link for riders over ntfy.sh (free, no account needed). Each ride code is a topic:
- * riders post packets to it and stream its messages. Anyone who knows the topic can read it.
+ * Internet rider link over Firebase Realtime Database (free Spark tier).
+ *
+ * Layout under "rides/<code>/":
+ *   riders/<riderId>  -> the rider's latest position packet (overwritten each update)
+ *   routes/<riderId>  -> the rider's latest route packet (overwritten when the route changes)
+ *   sos/<pushKey>     -> SOS events (kept as separate entries so they aren't overwritten)
  */
 class OnlineLink(
     private val onPacket: (String) -> Unit,
     private val onState: (Boolean) -> Unit
 ) {
-    @Volatile private var topic = ""
-    @Volatile private var running = false
-    @Volatile private var stream: Call? = null
-    private val listenHttp = OkHttpClient.Builder().readTimeout(0, TimeUnit.MILLISECONDS).build()
-    private val postHttp = listenHttp.newBuilder().callTimeout(15, TimeUnit.SECONDS).build()
+    private var ridersRef: DatabaseReference? = null
+    private var routesRef: DatabaseReference? = null
+    private var sosRef: DatabaseReference? = null
+    private var myRiderRef: DatabaseReference? = null
+    private var myRouteRef: DatabaseReference? = null
+    private val listeners = mutableListOf<ChildEventListener>()
+    private var uid: String? = null
 
     fun start(code: String) {
         stop()
-        topic = "$PREFIX${code.lowercase()}"
-        running = true
-        Thread { listen() }.apply { isDaemon = true; start() }
+        // Use the Firebase auth UID as the node key so the rules can verify ownership.
+        uid = RideState.firebaseUid ?: FirebaseAuth.getInstance().currentUser?.uid ?: RideState.myId
+        val db = FirebaseDatabase.getInstance()
+        ridersRef = db.getReference("rides/$code/riders")
+        routesRef = db.getReference("rides/$code/routes")
+        sosRef = db.getReference("rides/$code/sos")
+        myRiderRef = ridersRef!!.child(uid!!)
+        myRouteRef = routesRef!!.child(uid!!)
+        // If we disconnect, Firebase removes our node so other riders see us leave.
+        myRiderRef!!.onDisconnect().removeValue()
+        myRouteRef!!.onDisconnect().removeValue()
+        listen(ridersRef!!)
+        listen(routesRef!!)
+        listen(sosRef!!)
+        onState(true)
     }
 
-    private fun listen() {
-        while (running) {
-            try {
-                val call = listenHttp.newCall(Request.Builder().url("$BASE/$topic/json").build())
-                stream = call
-                call.execute().use { resp ->
-                    val src = resp.body?.source() ?: return@use
-                    while (running && !src.exhausted()) {
-                        val line = src.readUtf8Line() ?: break
-                        try {
-                            val o = JSONObject(line)
-                            when (o.optString("event")) {
-                                "open" -> onState(true)
-                                "message" -> onPacket(o.getString("message"))
-                            }
-                        } catch (e: Exception) {}
-                    }
-                }
-            } catch (e: Exception) {}
-            if (!running) break
-            onState(false)
-            try { Thread.sleep(3000) } catch (e: InterruptedException) { break }
+    private fun listen(ref: DatabaseReference) {
+        val l = object : ChildEventListener {
+            override fun onChildAdded(s: DataSnapshot, prev: String?) { deliver(s) }
+            override fun onChildChanged(s: DataSnapshot, prev: String?) { deliver(s) }
+            override fun onChildRemoved(s: DataSnapshot) {}
+            override fun onChildMoved(s: DataSnapshot, prev: String?) {}
+            override fun onCancelled(e: DatabaseError) { onState(false) }
         }
-        onState(false)
+        ref.addChildEventListener(l)
+        listeners.add(l)
     }
 
-    /** Posts one packet. Keep the send rate low: ntfy.sh limits how many messages a client may post. */
+    private fun deliver(s: DataSnapshot) {
+        if (s.key == uid) return
+        val v = s.value ?: return
+        onPacket(v.toString())
+    }
+
+    /** Route each packet to the right node so positions, routes and SOS never overwrite each other. */
     fun send(s: String) {
-        val t = topic
-        if (t.isEmpty() || !running) return
-        val body = s.toRequestBody("text/plain; charset=utf-8".toMediaType())
-        postHttp.newCall(Request.Builder().url("$BASE/$t").post(body).build()).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {}
-            override fun onResponse(call: Call, response: Response) { response.close() }
-        })
+        val o = try { JSONObject(s) } catch (e: Exception) { null }
+        when {
+            o?.has("sos") == true -> sosRef?.push()?.setValue(s)
+            o?.has("route") == true -> myRouteRef?.setValue(s)
+            else -> myRiderRef?.setValue(s)
+        }
     }
 
     fun stop() {
-        running = false
-        topic = ""
-        stream?.cancel()
-        stream = null
-    }
-
-    companion object {
-        /** Public ntfy server. To self-host, point this at your own server. */
-        const val BASE = "https://ntfy.sh"
-        const val PREFIX = "ridepack-"
+        listeners.forEach { l ->
+            ridersRef?.removeEventListener(l)
+            routesRef?.removeEventListener(l)
+            sosRef?.removeEventListener(l)
+        }
+        listeners.clear()
+        try { myRiderRef?.removeValue() } catch (e: Exception) {}
+        try { myRouteRef?.removeValue() } catch (e: Exception) {}
+        ridersRef = null; routesRef = null; sosRef = null
+        myRiderRef = null; myRouteRef = null
+        onState(false)
     }
 }

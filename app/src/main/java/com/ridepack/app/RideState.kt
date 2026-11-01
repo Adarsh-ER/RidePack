@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.location.Location
 import android.util.Xml
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
@@ -13,6 +14,7 @@ import java.io.InputStream
 
 data class Poi(val id: String, val name: String, val cat: String, val lat: Double, val lon: Double)
 data class Rider(val id: String, val name: String, val lat: Double, val lon: Double, val speed: Float, val seen: Long)
+data class NearbyRider(val id: String, val code: String)
 data class SosAlert(val id: String, val name: String, val type: String, val lat: Double, val lon: Double, val time: Long)
 data class Stop(val name: String, val lat: Double, val lon: Double)
 data class SavedPlace(val name: String, val lat: Double, val lon: Double)
@@ -44,14 +46,18 @@ object RideState {
     val savedPlaces = MutableStateFlow<List<SavedPlace>>(emptyList())
     val destination = MutableStateFlow<P?>(null)
     val previewRoute = MutableStateFlow<List<P>?>(null)
+    val nearby = MutableStateFlow<List<NearbyRider>>(emptyList())
     var link: NearbyLink? = null
     var online: OnlineLink? = null
     val onlineUp = MutableStateFlow(false)
     var myId = ""
     var myName = "Me"
+    var myReg = ""
+    /** Firebase anonymous-auth UID, used as the node key so security rules can tie data to the signed-in rider. */
+    var firebaseUid: String? = null
     val known = mutableMapOf<String, String>() // rider ID -> tagged name
 
-    /** Route packet; ntfy messages are size-limited, so the online link gets fewer points. */
+    /** Route packet; the online link carries fewer points to keep payloads small. */
     fun routePacket(r: Route, max: Int): String {
         val pts = r.pts
         val step = (pts.size / max).coerceAtLeast(1)
@@ -81,6 +87,12 @@ object Store {
     var code: String?
         get() = sp.getString("code", null)
         set(v) { if (v == null) sp.edit().remove("code").apply() else sp.edit().putString("code", v).apply() }
+    var vehicleReg: String
+        get() = sp.getString("reg", "")!!
+        set(v) { sp.edit().putString("reg", v).apply() }
+    var setupDone: Boolean
+        get() = sp.getBoolean("setupDone", false)
+        set(v) { sp.edit().putBoolean("setupDone", v).apply() }
 
     // ---- Settings ----
     var nightMode: Boolean
@@ -129,10 +141,17 @@ object Store {
             sp.edit().putString("name", devName).apply()
         }
         RideState.myName = sp.getString("name", "Me")!!
+        RideState.myReg = sp.getString("reg", "")!!
         try { val k = JSONObject(sp.getString("known", "{}")!!); k.keys().forEach { RideState.known[it] = k.getString(it) } } catch (e: Exception) {}
         try {
             val f = File(dir, "pois.json")
             if (f.exists()) { val a = JSONArray(f.readText()); RideState.pois.value = (0 until a.length()).map { val o = a.getJSONObject(it); Poi(o.getString("id"), o.getString("name"), o.getString("cat"), o.getDouble("lat"), o.getDouble("lon")) } }
+        } catch (e: Exception) {}
+        // Anonymous Firebase sign-in so database rules can require authentication.
+        try {
+            FirebaseAuth.getInstance().signInAnonymously().addOnCompleteListener { t ->
+                if (t.isSuccessful) RideState.firebaseUid = t.result?.user?.uid
+            }
         } catch (e: Exception) {}
     }
     var style: String

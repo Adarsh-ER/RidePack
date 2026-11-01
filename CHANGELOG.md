@@ -10,6 +10,26 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.10.0 (versionCode 46)
+- Nearby riders are now discovered automatically and listed in the Pairing tab; tap Pair to join a nearby ride instead of typing a code.
+- The Search button on the map now opens the location search instead of the tab panel.
+
+## 3.9.1 (versionCode 45)
+- The vehicle registration number is no longer shown or shared with other riders; only the name is shared. It is still collected during setup and stored locally.
+
+## 3.9.0 (versionCode 44)
+- First-launch setup: asks for your name and vehicle registration number, stores them, and shares them with the ride group (shown next to each rider).
+
+## 3.8.1 (versionCode 43)
+- Added anonymous Firebase sign-in and tied the database node keys to the signed-in user, so the Realtime Database can use authentication-based security rules.
+
+## 3.8.0 (versionCode 42)
+- Replaced the internet rider link (ntfy.sh) with Firebase Realtime Database for a more reliable, always-on internet link. Riders, routes, and SOS are stored under separate paths so they never overwrite each other, and a rider who disconnects is removed automatically.
+
+## 3.7.3 (versionCode 41)
+- Landscape: the Recenter button sits in the bottom-right corner (no longer overlapping Search/Refresh), and is dark in night mode.
+- Landscape: the Tabs / Hide tabs buttons are now round icons, matching the Search and Refresh buttons.
+
 ## 3.7.2 (versionCode 40)
 - A Recenter button is now always shown at the bottom-right of the map; it re-centers on your location and re-enables follow.
 

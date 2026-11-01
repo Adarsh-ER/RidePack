@@ -9,6 +9,9 @@ captures/
 # Local machine config (contains SDK paths)
 local.properties
 
+# Firebase project config (contains API key; add your own google-services.json locally)
+google-services.json
+
 # IDE
 .idea/
 *.iml

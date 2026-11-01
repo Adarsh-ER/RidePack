@@ -56,11 +56,14 @@ class RideService : Service() {
     private fun initLink() {
         link?.stop(); link = null
         val c = RideState.code.value ?: return
+        RideState.nearby.value = emptyList()
         link = NearbyLink(this, ::onPacket, { newCount ->
             val prev = RideState.links.value
             RideState.links.value = newCount
             if (newCount > prev && RideState.running.value) { send(); sendRoute() }
-        }, { RideState.msg.value = "Radio: $it" }).also { it.start(c, RideState.myId) }
+        }, { RideState.msg.value = "Radio: $it" }, { rid, rcode ->
+            RideState.nearby.value = RideState.nearby.value.filter { it.id != rid } + NearbyRider(rid, rcode)
+        }).also { it.start(c, RideState.myId) }
         RideState.link = link
         RideState.online?.stop()
         RideState.online = null
@@ -95,13 +98,13 @@ class RideService : Service() {
         RideState.destination.value?.let { d -> pkt.put("dest", "${d.lat},${d.lon}").put("destName", "Destination") }
         val s = pkt.toString()
         link?.send(s)
-        // ntfy.sh limits how often a client may post, so the internet link gets every 3rd update (~6 s).
-        if (sendTick++ % 3 == 0) RideState.online?.send(s)
+        // Firebase is reliable and the packets are tiny, so send every tick for smooth tracking.
+        if (sendTick++ % 2 == 0) RideState.online?.send(s)
     }
 
     fun sendRoute() {
         val r = RideState.route.value ?: return
-        // Nearby payloads are limited to 32 KB; ntfy messages to about 4 KB.
+        // Nearby payloads are limited to 32 KB; keep the online route smaller too.
         link?.send(RideState.routePacket(r, 200))
         RideState.online?.send(RideState.routePacket(r, 60))
     }
@@ -170,7 +173,7 @@ class RideService : Service() {
         if (::fused.isInitialized) fused.removeLocationUpdates(locCb)
         link?.stop(); RideState.link = null
         RideState.online?.stop(); RideState.online = null; RideState.onlineUp.value = false
-        knownRiders.clear(); RideState.running.value = false; RideState.links.value = 0
+        knownRiders.clear(); RideState.running.value = false; RideState.links.value = 0; RideState.nearby.value = emptyList()
         super.onDestroy()
     }
 }
