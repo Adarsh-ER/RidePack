@@ -10,6 +10,12 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.17.0 (versionCode 64)
+- Route line now shrinks as the rider travels, so the remaining distance and ETA update correctly.
+- Route line is a thin blue centre line over a road-coloured casing, so the road stays visible.
+- GPS position marker no longer gets stuck; rough or slightly stale fixes are still accepted.
+- Paired riders stay on the map and each has a Set ride button to navigate straight to them.
+
 ## 3.16.0 (versionCode 63)
 - Route line is now thinner so the road under it stays visible; the blue line sits in the centre.
 - Position marker no longer gets stuck: GPS fixes are accepted even when the current fix is old or a bit rougher.

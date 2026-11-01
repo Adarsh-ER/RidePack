@@ -43,7 +43,7 @@ object MapHolder {
         if (map != null) currentStyle = url
         val dark = url == NAV_STYLE
         val routeMain = if (dark) "#22d3ee" else "#4285f4"
-        val routeCase = if (dark) "#0e7490" else "#1a4fb8"
+        val routeCase = if (dark) "#374151" else "#e5e7eb"
         style = null
         map?.setStyle(Style.Builder().fromUri(url)) { s ->
             style = s
@@ -117,8 +117,9 @@ object MapHolder {
             // One route lookup per update, shared by the trimmed line, the bearing and the zoom logic.
             val snapRes = if (r != null && here != null) r.snap(here) else null
             val snap0 = snapRes?.first ?: 0.0
-            // During a ride, trim the route: traveled part in gray, remaining in blue.
-            val (traveledLine, remainingLine) = if (r != null && running && snapRes != null && snap0 > 50 && snap0 < r.total - 50) {
+            // During a ride, trim the route: traveled part in gray, remaining (from the rider) in blue,
+            // so the blue line shrinks as the rider progresses and the distance/ETA use the remaining part.
+            val (traveledLine, remainingLine) = if (r != null && running && snapRes != null && snap0 > 0 && snap0 < r.total) {
                 val idx = max(1, routeIndex(r, snap0))
                 val prev = r.pts[idx - 1]
                 val tLine = line(r.pts.take(idx + 1))
