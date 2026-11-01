@@ -122,6 +122,9 @@ object Store {
     var onlinePairing: Boolean
         get() = sp.getBoolean("onlinePairing", true)
         set(v) { sp.edit().putBoolean("onlinePairing", v).apply() }
+    var updateCheck: Boolean
+        get() = sp.getBoolean("updateCheck", true)
+        set(v) { sp.edit().putBoolean("updateCheck", v).apply() }
 
     fun init(c: Context) {
         sp = c.getSharedPreferences("rp", 0); dir = c.filesDir

@@ -80,6 +80,7 @@ val darkModeState by lazy { mutableStateOf(Store.nightMode) }
 val fontSizeState by lazy { mutableStateOf(Store.fontSizeScale) }
 val fontColorState by lazy { mutableStateOf(Store.fontColor) }
 val offlineModeState by lazy { mutableStateOf(Store.offlineMode) }
+val updateCheckState by lazy { mutableStateOf(Store.updateCheck) }
 val brightnessState by lazy { mutableStateOf(Store.brightness) }
 val autoCenterState by lazy { mutableStateOf(Store.autoCenter) }
 val autoRotateState by lazy { mutableStateOf(Store.autoRotate) }
@@ -579,10 +580,9 @@ fun scaledTypography(scale: Float): Typography {
                 dismissButton = { TextButton(onClick = { arrived = false }) { Text("Continue") } }
             )
         }
-        // In-app update: check GitHub for a newer release and offer install with the changelog.
+        // In-app update: the check is manual now - triggered from the Settings tab ("Check now").
         val updLatest = UpdateChecker.latest.value
         val updOpenNow = UpdateChecker.open.value
-        LaunchedEffect(Unit) { if (!offlineModeState.value) UpdateChecker.check(ctx) }
         if (updOpenNow && updLatest != null) {
             val notes = updLatest.body.lineSequence().firstOrNull { it.isNotBlank() }?.take(400) ?: ""
             AlertDialog(
@@ -1159,6 +1159,7 @@ fun etaSpeed(speed: Float): Float {
     var autoRotate by remember { mutableStateOf(Store.autoRotate) }
     var threeD by remember { mutableStateOf(Store.threeD) }
     var onlinePair by remember { mutableStateOf(Store.onlinePairing) }
+    var updateCheck by remember { mutableStateOf(Store.updateCheck) }
     var regs by remember { mutableStateOf(listOf<Pair<OfflineRegion, String>>()) }
     fun refresh() = Offline.list(ctx) { regs = it }
     LaunchedEffect(Unit) { refresh() }
@@ -1199,6 +1200,11 @@ fun etaSpeed(speed: Float): Float {
             Text("Internet pairing (Firebase, uses mobile data)", Modifier.weight(1f))
             Switch(checked = onlinePair, onCheckedChange = { onlinePair = it; Store.onlinePairing = it; if (RideState.running.value) startRide(ctx) })
         }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Check for updates", Modifier.weight(1f))
+            Switch(checked = updateCheck, onCheckedChange = { updateCheck = it; Store.updateCheck = it })
+        }
+        OutlinedButton(onClick = { UpdateChecker.check(ctx) }) { Text("Check now") }
         HorizontalDivider()
         val idxVer by PlaceIndex.version
         val idxBuilding by PlaceIndex.isBuilding

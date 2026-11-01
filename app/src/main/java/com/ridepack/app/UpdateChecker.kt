@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.compose.runtime.mutableStateOf
 import java.io.File
 import java.io.FileOutputStream
@@ -37,15 +38,18 @@ object UpdateChecker {
     private val handler = Handler(Looper.getMainLooper())
 
     fun check(ctx: Context) {
+        Log.d("UpdateChecker", "check() entered")
         checking.value = true
         error.value = null
         Thread {
-            val rel = try { fetchLatest() } catch (e: Exception) { null }
-            val inst = try { installed(ctx) } catch (e: Exception) { null }
+            Log.d("UpdateChecker", "check thread start")
+            val rel = try { fetchLatest() } catch (e: Exception) { Log.e("UpdateChecker", "fetch failed", e); null }
+            val inst = try { installed(ctx) } catch (e: Exception) { Log.e("UpdateChecker", "installed failed", e); null }
             latest.value = rel
             if (rel == null) { error.value = "Could not reach GitHub to check for updates"; checking.value = false; return@Thread }
             checking.value = false
-            if (rel.versionCode > (inst?.versionCode ?: 0)) open.value = true
+            Log.d("UpdateChecker", "latest=${rel.versionName} installed=${inst?.versionName} newer=${isNewer(rel, inst)}")
+            if (isNewer(rel, inst)) { Log.d("UpdateChecker", "NEWER -> open dialog"); open.value = true }
         }.start()
     }
 

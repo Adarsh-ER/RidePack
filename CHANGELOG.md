@@ -10,6 +10,21 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.14.5 (versionCode 61)
+- Minor update release with the manual in-app update check.
+
+## 3.14.4 (versionCode 60)
+- Minor update release with the manual in-app update check.
+
+## 3.14.3 (versionCode 59)
+- Minor update release with the refined in-app update feature (Settings toggle and manual check).
+
+## 3.14.2 (versionCode 58)
+- Minor update release with the refined in-app update feature (Settings toggle and manual check).
+
+## 3.14.1 (versionCode 57)
+- Refined the in-app update feature: the check can be switched on/off in Settings, and there is a manual "Check now" button.
+
 ## 3.14.0 (versionCode 56)
 - Minor update release that adds the in-app update feature: the app checks GitHub for the latest release and shows the release notes with a one-tap install of the downloaded APK.
 
