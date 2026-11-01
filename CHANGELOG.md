@@ -10,6 +10,9 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.20.0 (versionCode 67)
+- Minor update release to verify the in-app update download and install flow.
+
 ## 3.19.0 (versionCode 66)
 - Fixed the in-app update download: the installer now receives read permission for the downloaded APK, so the install step works.
 - Verified the APK content before installing.
