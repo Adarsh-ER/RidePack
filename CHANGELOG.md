@@ -10,6 +10,14 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.15.0 (versionCode 62)
+- Position marker no longer gets stuck: GPS fixes are accepted when the current position is old, even if the accuracy is a bit rougher.
+- Route lines are thinner, so the roads under the route stay visible.
+- Paired riders stay on the map: joining or pairing no longer clears the rider list.
+- New "Set ride" button on each paired rider, to navigate straight to them.
+- New "Exit app" button in Settings (stops the ride service and closes the app).
+- Update check is manual (Settings > Check now).
+
 ## 3.14.5 (versionCode 61)
 - Minor update release with the manual in-app update check.
 

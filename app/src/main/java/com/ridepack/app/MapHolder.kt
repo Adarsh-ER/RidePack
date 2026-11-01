@@ -51,9 +51,9 @@ object MapHolder {
             s.addSource(GeoJsonSource("route")); s.addSource(GeoJsonSource("traveled")); s.addSource(GeoJsonSource("pois")); s.addSource(GeoJsonSource("riders")); s.addSource(GeoJsonSource("me"))
             s.addSource(GeoJsonSource("dest")); s.addSource(GeoJsonSource("preview"))
             s.addSource(GeoJsonSource("stops")); s.addSource(GeoJsonSource("stopsline"))
-            s.addLayer(LineLayer("traveled-l", "traveled").withProperties(lineColor("#9ca3af"), roadWidth(0.8f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
-            s.addLayer(LineLayer("route-casing", "route").withProperties(lineColor(routeCase), roadWidth(1.35f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
-            s.addLayer(LineLayer("route-l", "route").withProperties(lineColor(routeMain), roadWidth(1f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
+            s.addLayer(LineLayer("traveled-l", "traveled").withProperties(lineColor("#9ca3af"), roadWidth(0.5f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
+            s.addLayer(LineLayer("route-casing", "route").withProperties(lineColor(routeCase), roadWidth(0.8f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
+            s.addLayer(LineLayer("route-l", "route").withProperties(lineColor(routeMain), roadWidth(0.5f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
             s.addLayer(CircleLayer("pois-l", "pois").withProperties(circleRadius(7f), circleColor("#e8590c"), circleStrokeColor("#ffffff"), circleStrokeWidth(2f)))
             s.addLayer(CircleLayer("riders-l", "riders").withProperties(circleRadius(9f), circleColor(Expression.get("color")), circleStrokeColor("#ffffff"), circleStrokeWidth(3f)))
             s.addLayer(SymbolLayer("riders-t", "riders").withProperties(textField(Expression.get("name")), textSize(12f),

@@ -114,6 +114,13 @@ fun startRide(c: Context) {
 }
 fun stopRide(c: Context) { c.stopService(Intent(c, RideService::class.java)); RideState.riders.value = emptyMap() }
 
+/** Stops the ride service (and with it location, pairing links and tracking), closes the screen and ends the process. */
+fun exitApp(c: Context) {
+    stopRide(c)
+    (c as? android.app.Activity)?.finishAndRemoveTask()
+    Handler(Looper.getMainLooper()).postDelayed({ android.os.Process.killProcess(android.os.Process.myPid()) }, 600)
+}
+
 fun hasLocation(c: Context) =
     ContextCompat.checkSelfPermission(c, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
     ContextCompat.checkSelfPermission(c, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -244,6 +251,16 @@ fun quickDest(name: String, lat: Double, lon: Double) {
     MapHolder.resetCenter()
     MapHolder.push()
     RideState.msg.value = "Destination set: $name"
+}
+
+/** Navigate to a paired rider's current position. Their marker keeps updating, and tapping again re-targets them. */
+fun setRideTo(ctx: Context, name: String, lat: Double, lon: Double) {
+    RideState.destination.value = P(lat, lon)
+    panelExpandedState.value = false
+    panelHiddenState.value = true
+    MapHolder.follow.value = true; MapHolder.resetCenter()
+    if (!RideState.running.value) startRide(ctx)
+    RideState.msg.value = "Ride set to $name"
 }
 
 /** Start navigating to the first arranged stop; the rest stay queued for sequential navigation. */
@@ -961,7 +978,7 @@ fun etaSpeed(speed: Float): Float {
     fun join(code: String) {
         val k = code.uppercase().filter { it.isLetterOrDigit() }.removePrefix("RP")
         if (k.length < 4) { RideState.msg.value = "Enter a valid ride code"; return }
-        Store.saveName(n.ifBlank { "Me" }); RideState.riders.value = emptyMap(); RideState.destination.value = null; RideState.route.value = null; RideState.previewRoute.value = null; RideState.code.value = k; c = "RP-$k"; Store.code = k; keepPanelState.value = true; startRide(ctx)
+        Store.saveName(n.ifBlank { "Me" }); RideState.destination.value = null; RideState.route.value = null; RideState.previewRoute.value = null; RideState.code.value = k; c = "RP-$k"; Store.code = k; keepPanelState.value = true; startRide(ctx)
     }
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         TabRow(selectedTabIndex = subTab) {
@@ -1003,6 +1020,7 @@ fun etaSpeed(speed: Float): Float {
                             color = if (age > 30 || (d ?: 0.0) > 1500) Color(0xFFB42318) else Color.Unspecified, fontSize = 13.sp)
                     }
                     TextButton(onClick = { MapHolder.focus(r.lat, r.lon) }) { Text("Locate") }
+                    TextButton(onClick = { setRideTo(ctx, r.name, r.lat, r.lon) }) { Text("Set ride") }
                 }
             }
             if (riders.isEmpty() && code == null) Text("No riders yet. Create or join a ride in the Pairing tab.")
@@ -1205,6 +1223,18 @@ fun etaSpeed(speed: Float): Float {
             Switch(checked = updateCheck, onCheckedChange = { updateCheck = it; Store.updateCheck = it })
         }
         OutlinedButton(onClick = { UpdateChecker.check(ctx) }) { Text("Check now") }
+        HorizontalDivider()
+        var confirmExit by remember { mutableStateOf(false) }
+        Button(onClick = { confirmExit = true }, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))) { Text("Exit app") }
+        if (confirmExit) {
+            AlertDialog(
+                onDismissRequest = { confirmExit = false },
+                title = { Text("Exit RidePack?", fontWeight = FontWeight.Bold) },
+                text = { Text("This stops your ride tracking and rider link, and closes the app.") },
+                confirmButton = { Button(onClick = { confirmExit = false; exitApp(ctx) }) { Text("Exit") } },
+                dismissButton = { TextButton(onClick = { confirmExit = false }) { Text("Cancel") } }
+            )
+        }
         HorizontalDivider()
         val idxVer by PlaceIndex.version
         val idxBuilding by PlaceIndex.isBuilding

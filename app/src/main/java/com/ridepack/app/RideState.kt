@@ -21,10 +21,11 @@ data class SavedPlace(val name: String, val lat: Double, val lon: Double)
 
 /** Google-Maps-style location filtering: reject inaccurate, stale, or impossible-jump fixes. */
 fun shouldAcceptLocation(new: Location, cur: Location?): Boolean {
-    // Reject clearly inaccurate fixes.
-    if (new.accuracy > 25f) return false
+    // Reject clearly inaccurate fixes; if the current marker is old, accept a rougher fix so it never sticks.
+    val curStale = cur == null || System.currentTimeMillis() - cur.time > 8000L
+    if (new.accuracy > (if (curStale) 100f else 40f)) return false
     // Reject stale fixes.
-    if (System.currentTimeMillis() - new.time > 5000L) return false
+    if (System.currentTimeMillis() - new.time > 8000L) return false
     if (cur == null) return true
     // Reject impossible jumps (faster than 70 m/s ~ 252 km/h).
     val elapsed = new.time - cur.time
