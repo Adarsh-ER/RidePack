@@ -1,0 +1,26 @@
+# Gradle / Android build outputs
+.gradle/
+build/
+app/build/
+captures/
+*.apk
+*.aab
+
+# Local machine config (contains SDK paths)
+local.properties
+
+# IDE
+.idea/
+*.iml
+*.hprof
+
+# Screenshots / scratch images and logs at the repo root only
+/*.png
+/*.jpg
+/*.jpeg
+/*.log
+/*.txt
+
+# macOS / Windows noise
+.DS_Store
+Thumbs.db
