@@ -85,6 +85,7 @@ val autoCenterState by lazy { mutableStateOf(Store.autoCenter) }
 val autoRotateState by lazy { mutableStateOf(Store.autoRotate) }
 val threeDState by lazy { mutableStateOf(Store.threeD) }
 val panelExpandedState = mutableStateOf(true)
+val keepPanelState = mutableStateOf(false)
 val editPlaceKey = mutableStateOf<String?>(null)
 val droppedPin = mutableStateOf<P?>(null)
 val searchOpen = mutableStateOf(false)
@@ -356,9 +357,11 @@ fun scaledTypography(scale: Float): Typography {
     var wasRunning by remember { mutableStateOf(running) }
     LaunchedEffect(running) {
         if (running != wasRunning) {
-            panelExpandedState.value = !running
+            if (running && keepPanelState.value) { /* started from the riders tab: keep the panel open */ }
+            else panelExpandedState.value = !running
             if (running) MapHolder.follow.value = true
             wasRunning = running
+            if (!running) keepPanelState.value = false
         }
     }
     // During a ride, check every 5 s that the camera is still on the rider and bring it back if it drifted
@@ -958,7 +961,7 @@ fun etaSpeed(speed: Float): Float {
     fun join(code: String) {
         val k = code.uppercase().filter { it.isLetterOrDigit() }.removePrefix("RP")
         if (k.length < 4) { RideState.msg.value = "Enter a valid ride code"; return }
-        Store.saveName(n.ifBlank { "Me" }); RideState.riders.value = emptyMap(); RideState.destination.value = null; RideState.route.value = null; RideState.previewRoute.value = null; RideState.code.value = k; c = "RP-$k"; Store.code = k; startRide(ctx)
+        Store.saveName(n.ifBlank { "Me" }); RideState.riders.value = emptyMap(); RideState.destination.value = null; RideState.route.value = null; RideState.previewRoute.value = null; RideState.code.value = k; c = "RP-$k"; Store.code = k; keepPanelState.value = true; startRide(ctx)
     }
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         TabRow(selectedTabIndex = subTab) {
