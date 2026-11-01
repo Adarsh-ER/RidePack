@@ -10,6 +10,10 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.13.0 (versionCode 54)
+- New in-app update feature: the app checks GitHub for the latest release and, when a newer version is out, shows an update prompt with the release notes ("What's new?") and can install the downloaded APK directly from GitHub with one tap.
+- The installer uses a FileProvider so the downloaded update APK can be handed to the Android package installer.
+
 ## 3.12.0 (versionCode 53)
 - New nearby place index: the app downloads the names of towns, villages, suburbs and localities within about 200 km and caches them on the phone. Searching a place now shows local matches instantly (nearest first) without waiting for the map server, and search still works in offline mode.
 - The master index covers about 200 km, built in small map tiles (nearest first, saved as it goes, and resumed if interrupted). Once the master index is done, later refreshes cover only about 50 km and happen after moving more than 25 km, which is much lighter on the map servers. A full rebuild happens only when the index is older than 30 days.

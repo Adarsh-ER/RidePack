@@ -576,6 +576,27 @@ fun scaledTypography(scale: Float): Typography {
                 dismissButton = { TextButton(onClick = { arrived = false }) { Text("Continue") } }
             )
         }
+        // In-app update: check GitHub for a newer release and offer install with the changelog.
+        val updLatest = UpdateChecker.latest.value
+        val updOpenNow = UpdateChecker.open.value
+        LaunchedEffect(Unit) { if (!offlineModeState.value) UpdateChecker.check(ctx) }
+        if (updOpenNow && updLatest != null) {
+            val notes = updLatest.body.lineSequence().firstOrNull { it.isNotBlank() }?.take(400) ?: ""
+            AlertDialog(
+                onDismissRequest = { UpdateChecker.open.value = false },
+                title = { Text("Update available", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("RidePack v${updLatest.versionName} is ready. What's new:", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        Text(notes.ifBlank { "Small fixes and improvements." }, fontSize = 13.sp)
+                    }
+                },
+                confirmButton = {
+                    Button(onClick = { UpdateChecker.install(ctx); UpdateChecker.open.value = false }) { Text("Install") }
+                },
+                dismissButton = { TextButton(onClick = { UpdateChecker.open.value = false }) { Text("Later") } }
+            )
+        }
     }
     }
     }

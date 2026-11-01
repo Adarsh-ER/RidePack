@@ -2,7 +2,7 @@ plugins { id("com.android.application"); id("org.jetbrains.kotlin.android"); id(
 android {
     namespace = "com.ridepack.app"
     compileSdk = 34
-    defaultConfig { applicationId = "com.ridepack.app"; minSdk = 26; targetSdk = 34; versionCode = 53; versionName = "3.12.0" }
+    defaultConfig { applicationId = "com.ridepack.app"; minSdk = 26; targetSdk = 34; versionCode = 54; versionName = "3.13.0" }
     buildFeatures { compose = true }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
