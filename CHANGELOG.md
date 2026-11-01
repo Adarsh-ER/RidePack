@@ -10,6 +10,11 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.16.0 (versionCode 63)
+- Route line is now thinner so the road under it stays visible; the blue line sits in the centre.
+- Position marker no longer gets stuck: GPS fixes are accepted even when the current fix is old or a bit rougher.
+- Paired riders stay on the map after pairing; each one has a "Set ride" button to navigate straight to them.
+
 ## 3.15.0 (versionCode 62)
 - Position marker no longer gets stuck: GPS fixes are accepted when the current position is old, even if the accuracy is a bit rougher.
 - Route lines are thinner, so the roads under the route stay visible.

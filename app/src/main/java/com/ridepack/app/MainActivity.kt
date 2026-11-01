@@ -132,8 +132,7 @@ fun locateMe(ctx: Context) {
     val cb = object : LocationCallback() {
         override fun onLocationResult(r: LocationResult) {
             val l = r.lastLocation ?: return
-            val cur = RideState.me.value
-            if (cur == null || l.accuracy < cur.accuracy) RideState.me.value = l
+            if (shouldAcceptLocation(l, RideState.me.value)) RideState.me.value = l
         }
     }
     val req = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 500L)

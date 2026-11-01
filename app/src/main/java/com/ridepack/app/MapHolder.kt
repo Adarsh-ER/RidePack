@@ -51,9 +51,9 @@ object MapHolder {
             s.addSource(GeoJsonSource("route")); s.addSource(GeoJsonSource("traveled")); s.addSource(GeoJsonSource("pois")); s.addSource(GeoJsonSource("riders")); s.addSource(GeoJsonSource("me"))
             s.addSource(GeoJsonSource("dest")); s.addSource(GeoJsonSource("preview"))
             s.addSource(GeoJsonSource("stops")); s.addSource(GeoJsonSource("stopsline"))
-            s.addLayer(LineLayer("traveled-l", "traveled").withProperties(lineColor("#9ca3af"), roadWidth(0.5f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
-            s.addLayer(LineLayer("route-casing", "route").withProperties(lineColor(routeCase), roadWidth(0.8f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
-            s.addLayer(LineLayer("route-l", "route").withProperties(lineColor(routeMain), roadWidth(0.5f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
+            s.addLayer(LineLayer("traveled-l", "traveled").withProperties(lineColor("#9ca3af"), roadWidth(0.3f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
+            s.addLayer(LineLayer("route-casing", "route").withProperties(lineColor(routeCase), roadWidth(0.5f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
+            s.addLayer(LineLayer("route-l", "route").withProperties(lineColor(routeMain), roadWidth(0.2f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
             s.addLayer(CircleLayer("pois-l", "pois").withProperties(circleRadius(7f), circleColor("#e8590c"), circleStrokeColor("#ffffff"), circleStrokeWidth(2f)))
             s.addLayer(CircleLayer("riders-l", "riders").withProperties(circleRadius(9f), circleColor(Expression.get("color")), circleStrokeColor("#ffffff"), circleStrokeWidth(3f)))
             s.addLayer(SymbolLayer("riders-t", "riders").withProperties(textField(Expression.get("name")), textSize(12f),
@@ -68,8 +68,8 @@ object MapHolder {
             s.addLayer(CircleLayer("me-l", "me").withProperties(circleRadius(10f), circleColor("#2563eb"), circleStrokeColor("#ffffff"), circleStrokeWidth(3f)))
             // Destination marker (red) and route preview (blue).
             s.addLayer(CircleLayer("dest-l", "dest").withProperties(circleRadius(10f), circleColor("#ef4444"), circleStrokeColor("#ffffff"), circleStrokeWidth(3f)))
-            s.addLayer(LineLayer("preview-casing", "preview").withProperties(lineColor(routeCase), roadWidth(1.35f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
-            s.addLayer(LineLayer("preview-l", "preview").withProperties(lineColor(routeMain), roadWidth(1f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
+            s.addLayer(LineLayer("preview-casing", "preview").withProperties(lineColor(routeCase), roadWidth(0.5f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
+            s.addLayer(LineLayer("preview-l", "preview").withProperties(lineColor(routeMain), roadWidth(0.2f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
             push()
             // Show India until the first fix arrives; once we have a location, push() follows the rider.
             if (!centered && RideState.me.value == null) map?.moveCamera(CameraUpdateFactory.newLatLngZoom(defaultCenter, defaultZoom))
