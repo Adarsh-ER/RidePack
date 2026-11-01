@@ -10,6 +10,9 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.14.0 (versionCode 56)
+- Minor update release that adds the in-app update feature: the app checks GitHub for the latest release and shows the release notes with a one-tap install of the downloaded APK.
+
 ## 3.13.1 (versionCode 55)
 - Fix: tapping "Create ride" (or "Join") no longer collapses the rider tab and jumps to the map; the panel stays open so you can create/join from the UI you were in.
 
