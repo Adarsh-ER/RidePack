@@ -10,6 +10,13 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.11.0 (versionCode 52)
+- During a ride the app now checks the map every 5 seconds and brings the camera back to your current location if it drifted away (for example after panning the map or looking at a saved place).
+
+## 3.10.5 (versionCode 51)
+- Setting a destination no longer leaves the map parked on the destination: the camera stays on your current location with the route and destination marker drawn ahead.
+- The "Follow me" button now also appears while navigating, so you can snap back to your location after panning the map.
+
 ## 3.10.4 (versionCode 50)
 - Fixed the internet rider link: the app now connects to the correct Realtime Database URL (asia-southeast1). Previously it used a default database URL that does not exist, so the internet link could not work.
 - The link now reports a clear message instead of failing silently if the database cannot be reached.

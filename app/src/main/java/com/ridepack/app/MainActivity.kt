@@ -231,7 +231,11 @@ fun addStop(name: String, lat: Double, lon: Double) {
 
 fun quickDest(name: String, lat: Double, lon: Double) {
     RideState.destination.value = P(lat, lon)
-    MapHolder.focus(lat, lon, 15.0)
+    // Setting a destination must not leave the camera parked on it: stay centred on the rider,
+    // with the destination marker and route preview drawn ahead.
+    MapHolder.follow.value = true
+    MapHolder.resetCenter()
+    MapHolder.push()
     RideState.msg.value = "Destination set: $name"
 }
 
@@ -350,6 +354,22 @@ fun scaledTypography(scale: Float): Typography {
             panelExpandedState.value = !running
             if (running) MapHolder.follow.value = true
             wasRunning = running
+        }
+    }
+    // During a ride, check every 5 s that the camera is still on the rider and bring it back if it drifted
+    // (e.g. after panning the map or looking at a saved place).
+    LaunchedEffect(running) {
+        while (running) {
+            delay(5_000)
+            val m = RideState.me.value ?: continue
+            val target = MapHolder.map?.cameraPosition?.target
+            val off = if (target == null) Double.MAX_VALUE
+                else Geo.dist(P(m.latitude, m.longitude), P(target.latitude, target.longitude))
+            if (!MapHolder.follow.value || off > 50) {
+                MapHolder.follow.value = true
+                MapHolder.resetCenter()
+                MapHolder.push()
+            }
         }
     }
     var locGranted by remember { mutableStateOf(hasLocation(ctx)) }
@@ -795,7 +815,9 @@ fun etaSpeed(speed: Float): Float {
         }
     }
     val following by MapHolder.follow
-    if (!following && dest == null) FilledTonalButton(onClick = { MapHolder.follow.value = true }, modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = if (dest != null) 110.dp else 10.dp)) { Text("Follow me") }
+    // Show the recenter button whenever the camera has been panned away, including during navigation.
+    if (!following) FilledTonalButton(onClick = { MapHolder.follow.value = true; MapHolder.resetCenter(); MapHolder.push() },
+        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = if (dest != null) 110.dp else 10.dp)) { Text("Follow me") }
     if (dest != null) Column(Modifier.align(Alignment.CenterEnd).padding(end = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         RoundNavButton(Icons.Filled.Search, "Search") { searchOpen.value = true }
         RoundNavButton(Icons.Filled.Refresh, "Refresh route") { routeRefreshTick.value++ }
