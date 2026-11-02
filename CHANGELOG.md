@@ -10,6 +10,10 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.20.1 (versionCode 69)
+- Route progress and GPS map matching: progress is measured with the cumulative route distance, the traveled and remaining lines meet exactly at the rider, and the matcher uses distance, heading and continuity scoring with a fallback to the nearest segment.
+- Unit tests for route splitting and matching.
+
 ## 3.20.0 (versionCode 67)
 - Minor update release to verify the in-app update download and install flow.
 

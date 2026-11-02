@@ -26,6 +26,9 @@ object MapHolder {
     val dropPinMode = mutableStateOf(false)
     private var centered = false
     private var lastPois: List<Poi>? = null
+    /** Map-matching state: the route being matched and the last accepted progress along it. */
+    private var matchRoute: Route? = null
+    private var matchS: Double? = null
     /** Dark map used while navigating to a destination (OpenFreeMap "dark" style). */
     const val NAV_STYLE = "https://tiles.openfreemap.org/styles/dark"
     var currentStyle = ""
@@ -97,6 +100,25 @@ object MapHolder {
         .put("properties", JSONObject().put("label", label))
         .put("geometry", JSONObject().put("type", "Point").put("coordinates", JSONArray().put(lon).put(lat)))
 
+    /** Map-match the fix to [r], keeping the accepted progress as the reference for the next update. */
+    private fun matchFix(r: Route, here: P, me: android.location.Location?): Route.Match {
+        if (matchRoute !== r) { matchRoute = r; matchS = null }
+        val heading = if (me != null && me.hasBearing()) me.bearing.toDouble() else null
+        val speed = if (me != null && me.hasSpeed()) me.speed.toDouble() else 0.0
+        val acc = if (me != null && me.hasAccuracy()) me.accuracy.toDouble() else 50.0
+        val m = try {
+            r.matchOnRoute(here, matchS, heading, speed, acc)
+        } catch (e: Exception) {
+            val f = r.snap(here)
+            Route.Match(f.first, f.second, 0, fallback = true)
+        }
+        matchS = m.s
+        return m
+    }
+
+    /** Last matched progress along [r] (metres), or null if [r] is not the route being matched. */
+    fun matchedProgress(r: Route): Double? = if (matchRoute === r) matchS else null
+
     /** Index of the first route point at or beyond distance s (0 if none); binary search on the cumulative distances. */
     private fun routeIndex(r: Route, s: Double): Int {
         var lo = 1; var hi = r.pts.size - 1; var idx = 0
@@ -111,19 +133,19 @@ object MapHolder {
         val s = style ?: return
         try {
             val r = RideState.route.value
+            if (r == null) { matchRoute = null; matchS = null }
             val me = RideState.me.value
             val running = RideState.running.value
             val here = me?.let { P(it.latitude, it.longitude) }
-            // One route lookup per update, shared by the trimmed line, the bearing and the zoom logic.
-            val snapRes = if (r != null && here != null) r.snap(here) else null
+            // One match per update, shared by the trimmed line, the bearing and the zoom logic.
+            val matchRes = if (r != null && here != null) matchFix(r, here, me) else null
+            val snapRes = matchRes?.let { Pair(it.s, it.off) }
             val snap0 = snapRes?.first ?: 0.0
-            // During a ride, trim the route: traveled part in gray, remaining (from the rider) in blue,
-            // so the blue line shrinks as the rider progresses and the distance/ETA use the remaining part.
+            // During a ride, trim the route: traveled part in gray, remaining in blue. Both halves meet at the rider.
             val (traveledLine, remainingLine) = if (r != null && running && snapRes != null && snap0 > 0 && snap0 < r.total) {
-                val idx = max(1, routeIndex(r, snap0))
-                val prev = r.pts[idx - 1]
-                val tLine = line(r.pts.take(idx + 1))
-                val rLine = line(listOf(prev) + r.pts.drop(idx))
+                val (traveledPts, remainingPts) = r.splitAt(snap0)
+                val tLine = if (traveledPts.size >= 2) line(traveledPts) else null
+                val rLine = if (remainingPts.size >= 2) line(remainingPts) else null
                 Pair(tLine, rLine)
             } else if (r != null) {
                 Pair(null, line(r.pts))

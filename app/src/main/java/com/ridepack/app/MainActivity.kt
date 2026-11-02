@@ -773,7 +773,9 @@ class Nav(val title: String, val sub: String, val arrow: String, val eta: String
 fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview: List<P>? = null): Nav {
     if (me == null) return Nav("Waiting for GPS…", "Start a ride", "📡")
     if (r != null && r.pts.size >= 2) {
-        val (s, off) = r.snap(P(me.latitude, me.longitude)); val left = r.total - s
+        val near = r.snap(P(me.latitude, me.longitude))
+        val s = MapHolder.matchedProgress(r) ?: near.first
+        val off = near.second; val left = r.total - s
         if (left < 40) return Nav("You've arrived", "", "🏁")
         if (off > 200) return Nav("Off route", "${Geo.fmt(off)} from the route", "⚠️")
         val t = r.turns.firstOrNull { it.s > s + 30 }; val d = (t?.s ?: r.total) - s
