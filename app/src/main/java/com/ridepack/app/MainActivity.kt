@@ -244,6 +244,9 @@ fun addStop(name: String, lat: Double, lon: Double) {
 }
 
 fun quickDest(name: String, lat: Double, lon: Double) {
+    val ctl = groupController()
+    // In a group ride the leader stages the final destination; it stays hidden from riders until the ride starts.
+    if (ctl.session?.leaderId == RideState.myId) { ctl.setDestination(P(lat, lon)); RideState.msg.value = "Final destination staged: $name"; return }
     RideState.destination.value = P(lat, lon)
     // Setting a destination must not leave the camera parked on it: stay centred on the rider,
     // with the destination marker and route preview drawn ahead.
@@ -251,6 +254,16 @@ fun quickDest(name: String, lat: Double, lon: Double) {
     MapHolder.resetCenter()
     MapHolder.push()
     RideState.msg.value = "Destination set: $name"
+}
+
+/** Navigate to the fixed group meeting point like any other destination. */
+fun setRideToMeeting(ctx: Context, name: String, mp: P) {
+    RideState.destination.value = mp
+    panelExpandedState.value = false
+    panelHiddenState.value = true
+    MapHolder.follow.value = true; MapHolder.resetCenter(); MapHolder.push()
+    if (!RideState.running.value) startRide(ctx)
+    RideState.msg.value = "Ride set to $name"
 }
 
 /** Navigate to a paired rider's current position. Their marker keeps updating, and tapping again re-targets them. */
@@ -339,6 +352,7 @@ fun scaledTypography(scale: Float): Typography {
     var askRejoin by remember { mutableStateOf(false) }
     var showSetup by remember { mutableStateOf(!Store.setupDone) }
     val navOn by RideState.destination.collectAsState()
+    val group by RideState.group.collectAsState()
     val darkNow by darkModeState
     LaunchedEffect(landscape, navOn != null) { panelHiddenState.value = landscape || navOn != null }
     LaunchedEffect(navOn != null) {
@@ -984,6 +998,7 @@ fun etaSpeed(speed: Float): Float {
     fun join(code: String) {
         val k = code.uppercase().filter { it.isLetterOrDigit() }.removePrefix("RP")
         if (k.length < 4) { RideState.msg.value = "Enter a valid ride code"; return }
+        groupController().join(k)
         Store.saveName(n.ifBlank { "Me" }); RideState.destination.value = null; RideState.route.value = null; RideState.previewRoute.value = null; RideState.code.value = k; c = "RP-$k"; Store.code = k; keepPanelState.value = true; startRide(ctx)
     }
     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1011,19 +1026,63 @@ fun etaSpeed(speed: Float): Float {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { join(c) }) { Text("Join") }
-                Button(onClick = { val al = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; join("RP-" + (1..4).map { al.random() }.joinToString("")) }) { Text("Create ride") }
-                OutlinedButton(onClick = { RideState.code.value = null; RideState.riders.value = emptyMap(); Store.code = null; if (RideState.running.value) startRide(ctx) }) { Text("Leave") }
+                Button(onClick = {
+                    val al = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+                    val gen = "RP-" + (1..4).map { al.random() }.joinToString("")
+                    val k = gen.uppercase().filter { it.isLetterOrDigit() }.removePrefix("RP")
+                    // A group ride: a dedicated session with its own meeting point, destination and start.
+                    groupController().createRide(k)
+                    RideState.code.value = k; Store.code = k; c = gen; keepPanelState.value = true; startRide(ctx)
+                }) { Text("Create ride") }
+                OutlinedButton(onClick = { RideState.code.value = null; RideState.riders.value = emptyMap(); Store.code = null; RideState.groupCtl?.leave(); if (RideState.running.value) startRide(ctx) }) { Text("Leave") }
             }
             Text("Riders with the same code find each other over Bluetooth/Wi-Fi, with no mobile data. Keep phones within a few hundred metres.", fontSize = 12.sp)
         } else {
+            val grp = RideState.groupCtl
+            val stage = grp?.session?.stage
+            val meeting = grp?.session?.meeting
+            val pendingDest = grp?.pendingDestination
+            val iAmLeader = grp?.isLeader() ?: false
+            Text(if (stage == RideStage.STARTED) "Group ride - started" else "Group ride - waiting for riders", fontWeight = FontWeight.Bold)
+            if (meeting != null) {
+                val mdist = mp?.let { Geo.dist(it, P(meeting.lat, meeting.lon)) }
+                Text("Meeting point: ${"%.5f".format(meeting.lat)}, ${"%.5f".format(meeting.lon)} - ${mdist?.let { Geo.fmt(it) } ?: "?"} away - confirmed ${meeting.confirmedAt}", fontSize = 12.sp)
+            } else if (iAmLeader) Text("The leader has not set the meeting point yet.", fontSize = 12.sp)
+            if (iAmLeader) {
+                // Leader: set the fixed meeting point from the current GPS fix, or stage/start the ride.
+                Button(onClick = {
+                    val m = RideState.me.value
+                    val fix = m?.let { Fix(it.latitude, it.longitude, it.accuracy, it.time) }
+                    val res = GroupRules.meetingFromFix(fix, RideState.myId, System.currentTimeMillis())
+                    if (res.isSuccess) { grp?.setMeeting(res.getOrNull()!!); RideState.msg.value = "Meeting point saved" }
+                    else RideState.msg.value = res.exceptionOrNull()?.message ?: "Could not set the meeting point"
+                }) { Text("Set meeting point from my GPS") }
+                RideState.savedPlaces.value.forEach { sp -> TextButton(onClick = { grp?.setDestination(P(sp.lat, sp.lon)) }) { Text("Final destination: ${sp.name}") } }
+                if (pendingDest != null) {
+                    Button(onClick = { grp?.startRide()?.let { RideState.msg.value = it } }) { Text("Start group ride") }
+                }
+            }
+            if (!iAmLeader) {
+                val myFix = me?.let { Fix(it.latitude, it.longitude, it.accuracy, it.time) }
+                val check = GroupRules.arrivalCheck(myFix, meeting, now, Store.arrivalRadiusM.toDouble(), Store.arrivalAccuracyM)
+                Text(GroupRules.describeCheck(check), fontSize = 12.sp)
+                if (meeting != null) {
+                    Button(onClick = { meeting?.let { setRideToMeeting(ctx, "Meeting point", P(it.lat, it.lon)) } }) { Text("Navigate to meeting") }
+                }
+                if (check is ArrivalCheck.Ready) {
+                    Button(onClick = { grp?.confirmArrival(myFix, Store.arrivalRadiusM.toDouble(), Store.arrivalAccuracyM)?.let { RideState.msg.value = it } }) { Text("Confirm arrival") }
+                }
+            }
             Text("You: ${RideState.myName} - ID ${RideState.myId}", fontWeight = FontWeight.Bold)
             riders.values.forEach { r ->
                 val d = mp?.let { Geo.dist(it, P(r.lat, r.lon)) }; val age = (now - r.seen) / 1000; val ds = d?.let { Geo.fmt(it) } ?: "?"
+                val rstatus = GroupRules.riderStatus(r, meeting, grp?.arrivals?.get(r.id), now, Store.arrivalRadiusM.toDouble())
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(r.name, fontWeight = FontWeight.Bold)
                         Text(if (age > 30) "No signal for ${age}s - last seen $ds away" else "$ds away - ${(r.speed * 3.6f).roundToInt()} km/h",
                             color = if (age > 30 || (d ?: 0.0) > 1500) Color(0xFFB42318) else Color.Unspecified, fontSize = 13.sp)
+                        Text(rstatus.label, fontSize = 12.sp, color = if (rstatus == GroupStatus.ARRIVED || rstatus == GroupStatus.ARRIVED_PENDING) Color(0xFF16a34a) else Color.Unspecified)
                     }
                     TextButton(onClick = { MapHolder.focus(r.lat, r.lon) }) { Text("Locate") }
                     TextButton(onClick = { setRideTo(ctx, r.name, r.lat, r.lon) }) { Text("Set ride") }

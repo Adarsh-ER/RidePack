@@ -58,12 +58,18 @@ class RideService : Service() {
 
     private fun initLink() {
         link?.stop(); link = null
-        val c = RideState.code.value ?: return
+        val c = RideState.code.value
+        if (c == null) {
+            // No ride code: make sure no internet link from an earlier ride keeps running.
+            RideState.online?.stop(); RideState.online = null; RideState.onlineUp.value = false
+            RideState.nearby.value = emptyList()
+            return
+        }
         RideState.nearby.value = emptyList()
         link = NearbyLink(this, ::onPacket, { newCount ->
             val prev = RideState.links.value
             RideState.links.value = newCount
-            if (newCount > prev && RideState.running.value) { send(); sendRoute() }
+            if (newCount > prev && RideState.running.value) { send(); sendRoute(); sendGroup() }
         }, { RideState.msg.value = "Radio: $it" }, { rid, rcode ->
             RideState.nearby.value = RideState.nearby.value.filter { it.id != rid } + NearbyRider(rid, rcode)
         }).also { it.start(c, RideState.myId) }
@@ -71,8 +77,41 @@ class RideService : Service() {
         RideState.online?.stop()
         RideState.online = null
         if (Store.onlinePairing && !Store.offlineMode) {
-            RideState.online = OnlineLink(::onPacket, { RideState.onlineUp.value = it }).also { it.start(c) }
+            RideState.online = OnlineLink(::onPacket, { RideState.onlineUp.value = it }, ::onGroup).also { it.start(c) }
         } else RideState.onlineUp.value = false
+    }
+
+    /** Shared group state from Firebase. Callbacks from a ride that is no longer active are dropped. */
+    private fun onGroup(kind: String, code: String, json: String) {
+        if (code != RideState.code.value) return
+        val ctl = groupController()
+        ctl.onCommit = { sendGroup() }
+        try {
+            val o = JSONObject(json)
+            when (kind) {
+                "session" -> GroupJson.fromJson(o, code)?.let { ctl.applyRemoteSession(it) }
+                "destination" -> {
+                    val la = o.getDouble("lat"); val lo = o.getDouble("lon")
+                    if (GroupRules.validPoint(la, lo)) ctl.applyRemoteDestination(P(la, lo))
+                }
+                "arrival" -> {
+                    val id = o.optString("id"); val at = o.optLong("at", 0L)
+                    if (id.isNotEmpty() && at > 0L) ctl.applyRemoteArrival(id, at)
+                }
+            }
+        } catch (e: Exception) {}
+    }
+
+    /** Leader only: sends the committed group state to nearby riders so nearby-only riders see the same ride. */
+    private fun sendGroup() {
+        val ctl = groupController()
+        if (!ctl.isLeader()) return
+        val s = ctl.session ?: return
+        if (s.stage != RideStage.STARTED && s.meeting == null) return
+        // Only the committed session is sent: the destination appears here only once the ride is STARTED.
+        val committed = if (s.stage == RideStage.STARTED) s else s.copy(destination = null)
+        link?.send(JSONObject().put("id", RideState.myId).put("group", GroupJson.toJson(committed, withDestination = true)).toString())
+        ctl.onCommit = { sendGroup() }
     }
 
     private fun postSosNotification(name: String, type: String) {
@@ -97,8 +136,7 @@ class RideService : Service() {
         val m = RideState.me.value ?: return
         val pkt = JSONObject().put("id", RideState.myId).put("n", RideState.myName)
             .put("la", m.latitude).put("lo", m.longitude).put("v", m.speed.toDouble())
-        // Share destination so joined riders see the same target.
-        RideState.destination.value?.let { d -> pkt.put("dest", "${d.lat},${d.lon}").put("destName", "Destination") }
+        // The destination is not shared in position packets; riders get it only from the shared started state.
         val s = pkt.toString()
         link?.send(s)
         // Firebase is reliable and the packets are tiny, so send every tick for smooth tracking.
@@ -116,15 +154,12 @@ class RideService : Service() {
         try {
             val o = JSONObject(s); val id = o.getString("id"); if (id == RideState.myId) return
             val name = RideState.known[id] ?: o.optString("n", id)
-            // Sync destination from the ride leader.
-            if (o.has("dest")) {
-                val parts = o.getString("dest").split(",")
-                if (parts.size == 2) {
-                    val la = parts[0].toDoubleOrNull(); val lo = parts[1].toDoubleOrNull()
-                    if (la != null && lo != null && RideState.destination.value == null) {
-                        RideState.destination.value = P(la, lo)
-                    }
-                }
+            // Group ride state from the leader over Nearby: accepted only from the session's own leader.
+            if (o.has("group")) {
+                val code = RideState.code.value ?: return
+                val s = GroupJson.fromJson(o.getJSONObject("group"), code) ?: return
+                if (s.leaderId == id) groupController().applyRemoteSession(s)
+                return
             }
             // Sync route from the ride leader.
             if (o.has("route")) {

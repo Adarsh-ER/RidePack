@@ -10,6 +10,12 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.22.0 (versionCode 70)
+- Group ride: the leader confirms a fixed meeting point from their GPS; it is stored once and never moves with later GPS fixes.
+- Riders navigate to the fixed meeting point; arrival needs GPS proximity plus an explicit rider confirmation (75 m radius, 35 m accuracy), with retries for poor fixes.
+- Leader-only final destination staging and "Start group ride"; the destination is written to the shared session together with the started stage, so riders only see it once the ride has started.
+- Firebase group state lives under `rides/<code>/group` (stage + meeting + destination in one write); Nearby carries the committed session after each save.
+
 ## 3.21.0 (versionCode 68): RidePack Debug
 - Named this build "RidePack Debug" (same app package, so it updates the existing install).
 - New Debug & diagnostics section in Settings: start/stop logging, optional on-map overlay, screenshot capture, export of a shareable debug report (ZIP), and clear logs. Off by default; capture, export and clear are locked while moving.

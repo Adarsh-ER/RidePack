@@ -51,6 +51,9 @@ object RideState {
     val destination = MutableStateFlow<P?>(null)
     val previewRoute = MutableStateFlow<List<P>?>(null)
     val nearby = MutableStateFlow<List<NearbyRider>>(emptyList())
+    /** Group ride controller for the active ride, and its latest snapshot for the UI. */
+    var groupCtl: GroupController? = null
+    val group = MutableStateFlow<GroupView?>(null)
     var link: NearbyLink? = null
     var online: OnlineLink? = null
     val onlineUp = MutableStateFlow(false)
@@ -126,6 +129,12 @@ object Store {
     var onlinePairing: Boolean
         get() = sp.getBoolean("onlinePairing", true)
         set(v) { sp.edit().putBoolean("onlinePairing", v).apply() }
+    var arrivalRadiusM: Float
+        get() = sp.getFloat("arrivalRadius", 75f)
+        set(v) { sp.edit().putFloat("arrivalRadius", v).apply() }
+    var arrivalAccuracyM: Float
+        get() = sp.getFloat("arrivalAccuracy", 35f)
+        set(v) { sp.edit().putFloat("arrivalAccuracy", v).apply() }
     var debugOverlay: Boolean
         get() = sp.getBoolean("debugOverlay", false)
         set(v) { sp.edit().putBoolean("debugOverlay", v).apply() }

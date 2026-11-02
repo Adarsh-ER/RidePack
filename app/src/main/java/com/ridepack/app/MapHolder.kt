@@ -71,6 +71,9 @@ object MapHolder {
             s.addLayer(LineLayer("stopsline-l", "stopsline").withProperties(lineColor("#9ca3af"), lineWidth(3f), lineCap(org.maplibre.android.style.layers.Property.LINE_CAP_ROUND), lineJoin(org.maplibre.android.style.layers.Property.LINE_JOIN_ROUND)))
             s.addLayer(CircleLayer("stops-l", "stops").withProperties(circleRadius(10f), circleColor("#ffffff"), circleStrokeColor("#6b7280"), circleStrokeWidth(2.5f)))
             s.addLayer(SymbolLayer("stops-t", "stops").withProperties(textField(Expression.get("label")), textSize(11f), textColor("#374151"), textFont(arrayOf("Noto Sans Bold"))))
+            // Fixed group meeting point: green marker + label. Set once by the leader, never moves with GPS.
+            s.addSource(GeoJsonSource("meeting")); s.addLayer(CircleLayer("meeting-l", "meeting").withProperties(circleRadius(11f), circleColor("#16a34a"), circleStrokeColor("#ffffff"), circleStrokeWidth(3f)))
+            s.addLayer(SymbolLayer("meeting-t", "meeting").withProperties(textField(Expression.get("label")), textSize(12f), textOffset(arrayOf(0f, 1.6f)), textFont(arrayOf("Noto Sans Bold")), textHaloColor("#ffffff"), textHaloWidth(1.5f)))
             // Hide the style's 3D building extrusions; only the map itself is tilted.
             s.getLayer("building-3d")?.setProperties(org.maplibre.android.style.layers.PropertyFactory.visibility(org.maplibre.android.style.layers.Property.NONE))
             // Destination marker (red) and route preview (blue).
@@ -247,6 +250,10 @@ object MapHolder {
             val dest = RideState.destination.value
             val destFeat = dest?.let { pt(it.lat, it.lon, "Dest", "#ef4444") }
             s.getSourceAs<GeoJsonSource>("dest")?.setGeoJson(fc(listOfNotNull(destFeat)))
+            // Fixed group meeting point, from the shared session (set once by the leader).
+            val meeting = groupController()?.session?.meeting
+            val meetingFeat = meeting?.let { JSONObject().put("type", "Feature").put("properties", JSONObject().put("label", "Mtg")).put("geometry", JSONObject().put("type", "Point").put("coordinates", JSONArray().put(it.lon).put(it.lat))) }
+            s.getSourceAs<GeoJsonSource>("meeting")?.setGeoJson(fc(listOfNotNull(meetingFeat)))
             val preview = RideState.previewRoute.value
             val previewLine = preview?.let { line(it) }
             s.getSourceAs<GeoJsonSource>("preview")?.setGeoJson(fc(listOfNotNull(previewLine)))

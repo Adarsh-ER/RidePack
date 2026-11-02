@@ -23,7 +23,11 @@ class NearbyLink(
         override fun onPayloadTransferUpdate(ep: String, u: PayloadTransferUpdate) {}
     }
     private val life = object : ConnectionLifecycleCallback() {
-        override fun onConnectionInitiated(ep: String, i: ConnectionInfo) { client.acceptConnection(ep, payloadCb) }
+        override fun onConnectionInitiated(ep: String, i: ConnectionInfo) {
+            // Only accept peers advertising this ride's tag; reject everyone else before any data is exchanged.
+            if (myCode.isNotEmpty() && i.endpointName.split(":").getOrNull(1) == RideTag.of(myCode)) client.acceptConnection(ep, payloadCb)
+            else client.rejectConnection(ep)
+        }
         override fun onConnectionResult(ep: String, r: ConnectionResolution) { if (r.status.isSuccess) connected.add(ep); onLinks(connected.size) }
         override fun onDisconnected(ep: String) { connected.remove(ep); onLinks(connected.size) }
     }
@@ -33,11 +37,11 @@ class NearbyLink(
             val rid = parts.getOrNull(0) ?: return
             val rcode = parts.getOrNull(1) ?: ""
             when {
-                // Same ride code: connect automatically (smaller rider ID initiates to avoid a double connect).
-                rcode.isNotEmpty() && rcode == myCode -> {
+                // Same ride (matched by its public tag, never the code): connect automatically (smaller rider ID initiates).
+                rcode.isNotEmpty() && rcode == RideTag.of(myCode) -> {
                     if (myId < rid && !connected.contains(ep)) client.requestConnection(myId, ep, life)
                 }
-                // Different ride (or no ride yet): surface in the "nearby riders" list for manual pairing.
+                // Different ride (or no ride yet): surface in the "nearby riders" list for information only.
                 else -> onDiscovered(rid, rcode)
             }
         }
@@ -46,7 +50,8 @@ class NearbyLink(
 
     fun start(code: String, id: String) {
         stop(); myId = id; myCode = code
-        val epName = "$id:$code" // endpoint name carries the rider ID and ride code for discovery
+        // The endpoint name carries the rider ID and a one-way tag of the ride code. The code itself is never advertised.
+        val epName = "$id:${RideTag.of(code)}"
         client.startAdvertising(epName, SID, life, AdvertisingOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build())
             .addOnFailureListener { onError("advertise: ${it.message}") }
         client.startDiscovery(SID, disc, DiscoveryOptions.Builder().setStrategy(Strategy.P2P_CLUSTER).build())
