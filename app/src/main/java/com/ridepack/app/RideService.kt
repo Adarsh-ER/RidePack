@@ -18,7 +18,10 @@ class RideService : Service() {
     private val locCb = object : LocationCallback() {
         override fun onLocationResult(r: LocationResult) {
             val l = r.lastLocation ?: return
-            if (shouldAcceptLocation(l, RideState.me.value)) RideState.me.value = l
+            try {
+                val reason = locationRejectReason(l, RideState.me.value)
+                if (reason == null) RideState.me.value = l else Diag.rejected(l, reason)
+            } catch (e: Exception) { Diag.error("gps_callback", e) }
         }
     }
     private var idleTicks = 0

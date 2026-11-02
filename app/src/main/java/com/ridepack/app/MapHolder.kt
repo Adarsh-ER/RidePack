@@ -26,6 +26,14 @@ object MapHolder {
     val dropPinMode = mutableStateOf(false)
     private var centered = false
     private var lastPois: List<Poi>? = null
+    /** Map-matching state: the route being matched and the last accepted progress along it. */
+    private var matchRoute: Route? = null
+    private var matchS: Double? = null
+    /** Diagnostics bookkeeping: what was last logged, so events are written only on change. */
+    private var lastRouteLogged: Route? = null
+    private var lastFixLogged: Any? = null
+    private var lastTraveledCount = -1
+    private var lastRemainingCount = -1
     /** Dark map used while navigating to a destination (OpenFreeMap "dark" style). */
     const val NAV_STYLE = "https://tiles.openfreemap.org/styles/dark"
     var currentStyle = ""
@@ -48,6 +56,7 @@ object MapHolder {
         map?.setStyle(Style.Builder().fromUri(url)) { s ->
             style = s
             lastPois = null
+            Diag.event("style_loaded", mapOf("url" to url))
             s.addSource(GeoJsonSource("route")); s.addSource(GeoJsonSource("traveled")); s.addSource(GeoJsonSource("pois")); s.addSource(GeoJsonSource("riders")); s.addSource(GeoJsonSource("me"))
             s.addSource(GeoJsonSource("dest")); s.addSource(GeoJsonSource("preview"))
             s.addSource(GeoJsonSource("stops")); s.addSource(GeoJsonSource("stopsline"))
@@ -97,6 +106,74 @@ object MapHolder {
         .put("properties", JSONObject().put("label", label))
         .put("geometry", JSONObject().put("type", "Point").put("coordinates", JSONArray().put(lon).put(lat)))
 
+    /** Map-match the fix to [r], keeping the accepted progress as the reference for the next update. */
+    private fun matchFix(r: Route, here: P, me: android.location.Location?): Route.Match {
+        if (matchRoute !== r) {
+            Diag.event("match_reset", mapOf("reason" to "route_changed"))
+            matchRoute = r; matchS = null
+        }
+        val heading = if (me != null && me.hasBearing()) me.bearing.toDouble() else null
+        val speed = if (me != null && me.hasSpeed()) me.speed.toDouble() else 0.0
+        val acc = if (me != null && me.hasAccuracy()) me.accuracy.toDouble() else 50.0
+        val m = try {
+            r.matchOnRoute(here, matchS, heading, speed, acc)
+        } catch (e: Exception) {
+            Diag.error("route_match", e)
+            val f = r.snap(here)
+            Route.Match(f.first, f.second, 0, fallback = true)
+        }
+        matchS = m.s
+        return m
+    }
+
+    /** Records one GPS sample with its matcher details and camera state, and refreshes the overlay values. */
+    private fun logFix(me: android.location.Location, r: Route?, m: Route.Match?, prevS: Double?) {
+        val cam = map?.cameraPosition
+        val fields = linkedMapOf<String, Any?>(
+            "lat" to me.latitude,
+            "lon" to me.longitude,
+            "acc_m" to (if (me.hasAccuracy()) me.accuracy.toDouble() else null),
+            "speed_ms" to (if (me.hasSpeed()) me.speed.toDouble() else null),
+            "speed_kmh" to (if (me.hasSpeed()) me.speed * 3.6 else null),
+            "bearing_deg" to (if (me.hasBearing()) me.bearing.toDouble() else null),
+            "route" to (r != null),
+            "navigating" to (RideState.destination.value != null),
+            "riding" to RideState.running.value,
+            "follow" to follow.value,
+            "cam_lat" to cam?.target?.latitude,
+            "cam_lon" to cam?.target?.longitude,
+            "cam_zoom" to cam?.zoom,
+            "cam_bearing" to cam?.bearing
+        )
+        if (r != null && m != null) {
+            fields["prev_progress_m"] = prevS
+            fields["progress_m"] = m.s
+            fields["progress_delta_m"] = prevS?.let { m.s - it }
+            fields["distance_to_route_m"] = m.off
+            fields["segment"] = m.seg
+            fields["fallback"] = m.fallback
+            fields["heading_diff_deg"] = m.headingDiffDeg
+            fields["heading_penalty_m"] = m.headingPenalty
+            fields["continuity_penalty_m"] = m.continuityPenalty
+            fields["candidates"] = m.candidates
+            fields["remaining_m"] = r.total - m.s
+            fields["route_total_m"] = r.total
+        }
+        Diag.gps(fields)
+        Diag.live.value = DiagLive(
+            accuracyM = fields["acc_m"] as? Double,
+            speedKmh = fields["speed_kmh"] as? Double,
+            progressM = m?.s,
+            offRouteM = m?.off,
+            segment = m?.seg,
+            fallback = m?.fallback ?: false,
+            follow = follow.value
+        )
+    }
+
+    /** Last matched progress along [r] (metres), or null if [r] is not the route being matched. */
+    fun matchedProgress(r: Route): Double? = if (matchRoute === r) matchS else null
+
     /** Index of the first route point at or beyond distance s (0 if none); binary search on the cumulative distances. */
     private fun routeIndex(r: Route, s: Double): Int {
         var lo = 1; var hi = r.pts.size - 1; var idx = 0
@@ -111,23 +188,46 @@ object MapHolder {
         val s = style ?: return
         try {
             val r = RideState.route.value
+            if (r !== lastRouteLogged) {
+                Diag.route(
+                    when { r == null -> "cleared"; lastRouteLogged == null -> "loaded"; else -> "replaced" },
+                    r?.pts?.size, r?.total
+                )
+                lastRouteLogged = r
+            }
+            if (r == null) {
+                if (matchRoute != null) Diag.event("match_reset", mapOf("reason" to "route_cleared"))
+                matchRoute = null; matchS = null
+            }
             val me = RideState.me.value
             val running = RideState.running.value
             val here = me?.let { P(it.latitude, it.longitude) }
-            // One route lookup per update, shared by the trimmed line, the bearing and the zoom logic.
-            val snapRes = if (r != null && here != null) r.snap(here) else null
+            val prevS = if (r != null && matchRoute === r) matchS else null
+            // One match per update, shared by the trimmed line, the bearing and the zoom logic.
+            val matchRes = if (r != null && here != null) matchFix(r, here, me) else null
+            val snapRes = matchRes?.let { Pair(it.s, it.off) }
+            if (me != null && me !== lastFixLogged && Diag.wantLive()) {
+                lastFixLogged = me
+                logFix(me, r, matchRes, prevS)
+            }
             val snap0 = snapRes?.first ?: 0.0
-            // During a ride, trim the route: traveled part in gray, remaining (from the rider) in blue,
-            // so the blue line shrinks as the rider progresses and the distance/ETA use the remaining part.
+            var traveledCount = 0
+            var remainingCount = 0
+            // During a ride, trim the route: traveled part in gray, remaining in blue. Both halves meet at the rider.
             val (traveledLine, remainingLine) = if (r != null && running && snapRes != null && snap0 > 0 && snap0 < r.total) {
-                val idx = max(1, routeIndex(r, snap0))
-                val prev = r.pts[idx - 1]
-                val tLine = line(r.pts.take(idx + 1))
-                val rLine = line(listOf(prev) + r.pts.drop(idx))
+                val (traveledPts, remainingPts) = r.splitAt(snap0)
+                traveledCount = traveledPts.size; remainingCount = remainingPts.size
+                val tLine = if (traveledPts.size >= 2) line(traveledPts) else null
+                val rLine = if (remainingPts.size >= 2) line(remainingPts) else null
                 Pair(tLine, rLine)
             } else if (r != null) {
+                remainingCount = r.pts.size
                 Pair(null, line(r.pts))
             } else Pair(null, null)
+            if (Diag.recording.value && (traveledCount != lastTraveledCount || remainingCount != lastRemainingCount)) {
+                lastTraveledCount = traveledCount; lastRemainingCount = remainingCount
+                Diag.event("route_source", mapOf("traveled_pts" to traveledCount, "remaining_pts" to remainingCount))
+            }
             s.getSourceAs<GeoJsonSource>("traveled")?.setGeoJson(fc(listOfNotNull(traveledLine)))
             s.getSourceAs<GeoJsonSource>("route")?.setGeoJson(fc(listOfNotNull(remainingLine)))
             val pois = RideState.pois.value
@@ -201,8 +301,12 @@ object MapHolder {
                     }
                 }
             }
+            if (Diag.wantLive()) map?.cameraPosition?.let { cp ->
+                cp.target?.let { t -> Diag.camera(t.latitude, t.longitude, cp.zoom, cp.bearing, follow.value) }
+            }
         } catch (e: IllegalStateException) {
             // Style was replaced mid-push; the new style's callback pushes again.
+            Diag.error("render", e)
         }
     }
 

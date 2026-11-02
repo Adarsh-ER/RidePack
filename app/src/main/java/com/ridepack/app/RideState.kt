@@ -20,17 +20,20 @@ data class Stop(val name: String, val lat: Double, val lon: Double)
 data class SavedPlace(val name: String, val lat: Double, val lon: Double)
 
 /** Google-Maps-style location filtering: reject inaccurate, stale, or impossible-jump fixes. */
-fun shouldAcceptLocation(new: Location, cur: Location?): Boolean {
+fun shouldAcceptLocation(new: Location, cur: Location?): Boolean = locationRejectReason(new, cur) == null
+
+/** Why a fix is rejected ("accuracy", "stale", "jump"), or null when it is accepted. */
+fun locationRejectReason(new: Location, cur: Location?): String? {
     // Reject clearly inaccurate fixes; if the current marker is old, accept a rougher fix so it never sticks.
     val curStale = cur == null || System.currentTimeMillis() - cur.time > 8000L
-    if (new.accuracy > (if (curStale) 100f else 40f)) return false
+    if (new.accuracy > (if (curStale) 100f else 40f)) return "accuracy"
     // Reject stale fixes.
-    if (System.currentTimeMillis() - new.time > 8000L) return false
-    if (cur == null) return true
+    if (System.currentTimeMillis() - new.time > 8000L) return "stale"
+    if (cur == null) return null
     // Reject impossible jumps (faster than 70 m/s ~ 252 km/h).
     val elapsed = new.time - cur.time
-    if (elapsed > 0 && cur.distanceTo(new) / (elapsed / 1000f) > 70f) return false
-    return true
+    if (elapsed > 0 && cur.distanceTo(new) / (elapsed / 1000f) > 70f) return "jump"
+    return null
 }
 
 object RideState {
@@ -123,6 +126,13 @@ object Store {
     var onlinePairing: Boolean
         get() = sp.getBoolean("onlinePairing", true)
         set(v) { sp.edit().putBoolean("onlinePairing", v).apply() }
+    var debugOverlay: Boolean
+        get() = sp.getBoolean("debugOverlay", false)
+        set(v) { sp.edit().putBoolean("debugOverlay", v).apply() }
+    /** Id of the debug logging session that is currently recording, or null when logging is off. */
+    var debugSession: String?
+        get() = sp.getString("debugSession", null)
+        set(v) { if (v == null) sp.edit().remove("debugSession").apply() else sp.edit().putString("debugSession", v).apply() }
     var updateCheck: Boolean
         get() = sp.getBoolean("updateCheck", true)
         set(v) { sp.edit().putBoolean("updateCheck", v).apply() }

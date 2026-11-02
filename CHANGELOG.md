@@ -10,6 +10,12 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.21.0 (versionCode 68): RidePack Debug
+- Named this build "RidePack Debug" (same app package, so it updates the existing install).
+- New Debug & diagnostics section in Settings: start/stop logging, optional on-map overlay, screenshot capture, export of a shareable debug report (ZIP), and clear logs. Off by default; capture, export and clear are locked while moving.
+- Route progress and GPS map matching: progress is measured with the cumulative route distance, the traveled and remaining lines meet exactly at the rider, and the matcher uses distance, heading and continuity scoring with a fallback to the nearest segment.
+- Unit tests: 31 passing (route splitting, matching, logging, rotation, report contents).
+
 ## 3.20.0 (versionCode 67)
 - Minor update release to verify the in-app update download and install flow.
 

@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
         MapLibre.getInstance(this); Store.init(this)
+        Diag.init(this)
         // Read the cached nearby place index off the main thread; search falls back to the network until it's ready.
         Thread { PlaceIndex.load(this) }.start()
         setContent { MaterialTheme { App() } }
@@ -433,6 +434,7 @@ fun scaledTypography(scale: Float): Typography {
     Column(Modifier.fillMaxSize().systemBarsPadding().background(colorScheme.background)) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             MapPane(Modifier.fillMaxSize(), locGranted); Hud()
+            DebugOverlay(Modifier.align(Alignment.CenterStart).padding(start = 8.dp))
             if (landscape && !panelHiddenState.value && hideBtnShown) Box(Modifier.align(Alignment.TopEnd).padding(top = 60.dp, end = 12.dp)) {
                 RoundNavButton(Icons.Filled.Close, "Hide tabs") { panelHiddenState.value = true }
             }
@@ -711,7 +713,10 @@ fun scaledTypography(scale: Float): Typography {
         val cb = object : LocationCallback() {
             override fun onLocationResult(r: LocationResult) {
                 val l = r.lastLocation ?: return
-                if (shouldAcceptLocation(l, RideState.me.value)) RideState.me.value = l
+                try {
+                    val reason = locationRejectReason(l, RideState.me.value)
+                    if (reason == null) RideState.me.value = l else Diag.rejected(l, reason)
+                } catch (e: Exception) { Diag.error("gps_callback", e) }
             }
         }
         fun start() {
@@ -773,7 +778,9 @@ class Nav(val title: String, val sub: String, val arrow: String, val eta: String
 fun navInfo(r: Route?, me: android.location.Location?, dest: P? = null, preview: List<P>? = null): Nav {
     if (me == null) return Nav("Waiting for GPS…", "Start a ride", "📡")
     if (r != null && r.pts.size >= 2) {
-        val (s, off) = r.snap(P(me.latitude, me.longitude)); val left = r.total - s
+        val near = r.snap(P(me.latitude, me.longitude))
+        val s = MapHolder.matchedProgress(r) ?: near.first
+        val off = near.second; val left = r.total - s
         if (left < 40) return Nav("You've arrived", "", "🏁")
         if (off > 200) return Nav("Off route", "${Geo.fmt(off)} from the route", "⚠️")
         val t = r.turns.firstOrNull { it.s > s + 30 }; val d = (t?.s ?: r.total) - s
@@ -1264,5 +1271,6 @@ fun etaSpeed(speed: Float): Float {
                 TextButton(onClick = { Offline.delete(r) { refresh() } }) { Text("X") }
             }
         }
+        DebugSettings()
     }
 }
