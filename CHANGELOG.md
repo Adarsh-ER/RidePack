@@ -10,6 +10,9 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.24.0 (versionCode 72)
+- Sample route simulation tests with mocked GPS fixes: on-route rider, small deviation, sustained off-route, poor GPS accuracy and reroute-from-current-position flows against a sample road segment.
+
 ## 3.23.0 (versionCode 71)
 - Dynamic rerouting: when the rider stays off the planned route beyond ~45 m (with accuracy guard, 3 consecutive confirmed GPS updates), the app recalculates the route from the rider's current position to the unchanged final destination.
 - The new route replaces the old one, resets map matching and travelled/remaining rendering, and updates distance/ETA/progress; failures keep the previous route and retry via cooldown.

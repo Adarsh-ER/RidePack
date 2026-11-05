@@ -125,4 +125,72 @@ class RerouteTest {
         assertFalse(r.inProgress)
         assertNotNull(r.currentRoute)
     }
+
+    // ------------------------------------------------------------------ Sample route + simulated GPS fixes
+
+    /** Sample planned route: an east-west road leg (~541 m) between two points. */
+    private val sampleRoutePts = listOf(P(12.9716, 77.5946), P(12.9716, 77.5996))
+
+    private val startFix = P(12.9716, 77.5946) // rider at the start of the sample route
+    private val midFix = P(12.9716, 77.5976) // rider ~325 m along the sample route
+    private val driftedFix = P(12.97214, 77.595) // rider ~60 m north of the sample route (perpendicular offset)
+
+    /** Shortest distance (m) from a simulated GPS fix to the sample route geometry. */
+    private fun sampleDeviation(fix: P): Double = Route(sampleRoutePts).snap(fix).second
+
+    @Test fun sampleRouteRiderOnRouteDoesNotReroute() {
+        val route = Route(sampleRoutePts)
+        assertEquals(0.0, route.snap(startFix).second, 1.0)
+        assertEquals(0.0, route.snap(midFix).second, 1.0)
+        val tracker = OffRouteTracker(Geo.OFF_ROUTE_THRESHOLD_M, Geo.OFF_ROUTE_CONFIRMATIONS, cooldownMs = 0L)
+        assertFalse(tracker.update(route.snap(startFix).second, 12f, now))
+        assertFalse(tracker.update(route.snap(midFix).second, 12f, now))
+    }
+
+    @Test fun sampleRouteSmallDeviationDoesNotReroute() {
+        val tracker = OffRouteTracker(Geo.OFF_ROUTE_THRESHOLD_M, Geo.OFF_ROUTE_CONFIRMATIONS, cooldownMs = 0L)
+        val d = sampleDeviation(driftedFix)
+        assertTrue(d > Geo.OFF_ROUTE_THRESHOLD_M)
+        // Sub-threshold drift must not accumulate into a reroute.
+        assertFalse(tracker.update(20.0, 12f, now))
+        assertEquals(0, tracker.streak)
+    }
+
+    @Test fun sampleRouteSustainedOffRouteTriggersRerouteAfterConfirmations() {
+        val route = Route(sampleRoutePts)
+        val tracker = OffRouteTracker(Geo.OFF_ROUTE_THRESHOLD_M, Geo.OFF_ROUTE_CONFIRMATIONS, cooldownMs = 0L)
+        val d = sampleDeviation(driftedFix)
+        assertTrue(d > Geo.OFF_ROUTE_THRESHOLD_M)
+        assertFalse(tracker.update(d, 12f, now))
+        assertFalse(tracker.update(d, 12f, now))
+        assertTrue(tracker.update(d, 12f, now)) // sustained off-route -> reroute due
+    }
+
+    @Test fun sampleRoutePoorGpsAccuracyDoesNotFalseReroute() {
+        val tracker = OffRouteTracker(Geo.OFF_ROUTE_THRESHOLD_M, Geo.OFF_ROUTE_CONFIRMATIONS, cooldownMs = 0L)
+        assertFalse(tracker.update(60.0, 150f, now))
+        assertEquals(0, tracker.streak)
+    }
+
+    @Test fun sampleRouteGpsFixMimicsRerouteDeviation() {
+        val route = Route(sampleRoutePts)
+        val onRoute = route.matchOnRoute(midFix, 200.0, 90.0, 5.0, 12.0)
+        assertEquals(0.0, onRoute.off, 1.0)
+        assertTrue(onRoute.s > 0.0)
+        val offRoute = route.matchOnRoute(driftedFix, 0.0, 90.0, 5.0, 12.0)
+        assertTrue(offRoute.off > Geo.OFF_ROUTE_THRESHOLD_M)
+    }
+
+    @Test fun sampleRouteRerouteRecalculatesFromRiderPositionKeepingFinalDestination() {
+        val dest = P(12.9716, 77.5996)
+        val r = Reroute(Geo.OFF_ROUTE_THRESHOLD_M, Geo.OFF_ROUTE_CONFIRMATIONS, cooldownMs = 0L)
+        val origin = driftedFix // rider is off the sample route here
+        assertTrue(r.start(origin, dest, nowMs = 1000))
+        assertEquals(origin, r.lastOrigin)
+        assertEquals(dest, r.destination)
+        val newRoute = listOf<P>(origin, dest) // freshly fetched route via the existing Net provider
+        assertTrue(r.onResponse(newRoute, origin, dest, nowMs = 2000))
+        assertEquals(newRoute, r.currentRoute)
+        assertEquals(dest, r.destination) // final destination never changed
+    }
 }
