@@ -8,6 +8,11 @@ data class P(val lat: Double, val lon: Double)
 private const val HEADING_PENALTY_M = 25.0
 
 object Geo {
+    /** Rider is considered off route beyond this deviation (metres) before a recalculation is tried. */
+    const val OFF_ROUTE_THRESHOLD_M = 45.0
+    /** Consecutive accepted GPS updates beyond the threshold are needed before a reroute is triggered. */
+    const val OFF_ROUTE_CONFIRMATIONS = 3
+
     fun dist(a: P, b: P): Double {
         val r = 6371000.0
         val dLa = Math.toRadians(b.lat - a.lat); val dLo = Math.toRadians(b.lon - a.lon)

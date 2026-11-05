@@ -50,6 +50,8 @@ object RideState {
     val savedPlaces = MutableStateFlow<List<SavedPlace>>(emptyList())
     val destination = MutableStateFlow<P?>(null)
     val previewRoute = MutableStateFlow<List<P>?>(null)
+    /** Dynamic rerouting status: Navigating, Off route – recalculating, New route found, Unable to recalculate – retrying. */
+    val navStatus = MutableStateFlow("Navigating")
     val nearby = MutableStateFlow<List<NearbyRider>>(emptyList())
     /** Group ride controller for the active ride, and its latest snapshot for the UI. */
     var groupCtl: GroupController? = null

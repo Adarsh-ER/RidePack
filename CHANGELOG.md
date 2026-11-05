@@ -10,6 +10,11 @@ RidePack follows [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`.
 
 APK files are saved as `RidePack-v<versionName>.apk` in `Downloads\RidePack`.
 
+## 3.23.0 (versionCode 71)
+- Dynamic rerouting: when the rider stays off the planned route beyond ~45 m (with accuracy guard, 3 consecutive confirmed GPS updates), the app recalculates the route from the rider's current position to the unchanged final destination.
+- The new route replaces the old one, resets map matching and travelled/remaining rendering, and updates distance/ETA/progress; failures keep the previous route and retry via cooldown.
+- Navigation status feedback: Navigating, Off route – recalculating, New route found, Unable to recalculate – retrying.
+
 ## 3.22.0 (versionCode 70)
 - Group ride: the leader confirms a fixed meeting point from their GPS; it is stored once and never moves with later GPS fixes.
 - Riders navigate to the fixed meeting point; arrival needs GPS proximity plus an explicit rider confirmation (75 m radius, 35 m accuracy), with retries for poor fixes.

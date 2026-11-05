@@ -113,7 +113,7 @@ fun startRide(c: Context) {
     try { ContextCompat.startForegroundService(c, Intent(c, RideService::class.java)) }
     catch (e: Exception) { RideState.msg.value = "Could not start ride: ${e.message}" }
 }
-fun stopRide(c: Context) { c.stopService(Intent(c, RideService::class.java)); RideState.riders.value = emptyMap() }
+fun stopRide(c: Context) { c.stopService(Intent(c, RideService::class.java)); RideState.riders.value = emptyMap(); MapHolder.resetReroute() }
 
 /** Stops the ride service (and with it location, pairing links and tracking), closes the screen and ends the process. */
 fun exitApp(c: Context) {
@@ -248,6 +248,7 @@ fun quickDest(name: String, lat: Double, lon: Double) {
     // In a group ride the leader stages the final destination; it stays hidden from riders until the ride starts.
     if (ctl.session?.leaderId == RideState.myId) { ctl.setDestination(P(lat, lon)); RideState.msg.value = "Final destination staged: $name"; return }
     RideState.destination.value = P(lat, lon)
+    RideState.navStatus.value = "Navigating"
     // Setting a destination must not leave the camera parked on it: stay centred on the rider,
     // with the destination marker and route preview drawn ahead.
     MapHolder.follow.value = true
@@ -273,6 +274,7 @@ fun setRideTo(ctx: Context, name: String, lat: Double, lon: Double) {
     panelHiddenState.value = true
     MapHolder.follow.value = true; MapHolder.resetCenter()
     if (!RideState.running.value) startRide(ctx)
+    RideState.navStatus.value = "Navigating"
     RideState.msg.value = "Ride set to $name"
 }
 
@@ -286,6 +288,7 @@ fun setRide(ctx: Context) {
     } else if (RideState.destination.value == null) {
         RideState.msg.value = "Add a stop or choose a destination first"; return
     }
+    RideState.navStatus.value = "Navigating"
     panelExpandedState.value = false
     panelHiddenState.value = true
     MapHolder.follow.value = true; MapHolder.resetCenter()
@@ -851,6 +854,7 @@ fun etaSpeed(speed: Float): Float {
     val me by RideState.me.collectAsState(); val route by RideState.route.collectAsState(); val riders by RideState.riders.collectAsState()
     val dest by RideState.destination.collectAsState(); val preview by RideState.previewRoute.collectAsState()
     val nav = remember(me, route, dest, preview) { navInfo(route, me, dest, preview) }
+    val navStatus by RideState.navStatus.collectAsState()
     val far = me?.let { m -> riders.values.filter { Geo.dist(P(m.latitude, m.longitude), P(it.lat, it.lon)) > 1500 }.map { it.name } } ?: emptyList()
     val sosAlerts by RideState.sosAlerts.collectAsState()
     val linkNearby by RideState.links.collectAsState(); val linkOnline by RideState.onlineUp.collectAsState()
@@ -870,6 +874,7 @@ fun etaSpeed(speed: Float): Float {
                 }
             }
         }
+        Text("Nav status: $navStatus", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF34D399))
         if (RideState.running.value) {
             val linked = linkNearby > 0 || linkOnline
             Text(linkLabel(linkNearby, linkOnline), fontSize = 11.sp, fontWeight = FontWeight.Bold,

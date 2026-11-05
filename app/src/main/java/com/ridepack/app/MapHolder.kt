@@ -2,6 +2,11 @@ package com.ridepack.app
 
 import android.content.Context
 import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -34,6 +39,10 @@ object MapHolder {
     private var lastFixLogged: Any? = null
     private var lastTraveledCount = -1
     private var lastRemainingCount = -1
+    /** Dynamic rerouting: off-route decision + in-flight recalculation. */
+    private val reroute = Reroute()
+    private var navToken = 0
+    private val rerouteScope = CoroutineScope(Dispatchers.IO)
     /** Dark map used while navigating to a destination (OpenFreeMap "dark" style). */
     const val NAV_STYLE = "https://tiles.openfreemap.org/styles/dark"
     var currentStyle = ""
@@ -257,6 +266,14 @@ object MapHolder {
             val preview = RideState.previewRoute.value
             val previewLine = preview?.let { line(it) }
             s.getSourceAs<GeoJsonSource>("preview")?.setGeoJson(fc(listOfNotNull(previewLine)))
+            // Dynamic rerouting: the rider is confirmed off route (sustained deviation beyond the threshold with
+            // an acceptable fix) -> recalculate from the current position. Never for every GPS update.
+            if (running && dest != null && me != null && here != null) {
+                val deviation = matchRes?.off ?: 0.0
+                if (reroute.shouldReroute(deviation, if (me.hasAccuracy()) me.accuracy else null)) {
+                    rerouteNow()
+                }
+            }
             if (me != null && here != null) {
                 val ll = LatLng(me.latitude, me.longitude)
                 val navZoom = if (dest != null) 17.5 else if (running) 17.0 else 15.5
@@ -333,6 +350,40 @@ object MapHolder {
         val b = LatLngBounds.Builder(); pts.forEach { b.include(LatLng(it.lat, it.lon)) }
         map?.animateCamera(CameraUpdateFactory.newLatLngBounds(b.build(), 80))
     }
+
+    /** Recalculate the route from the rider's current position after an off-route confirmation; keeps the previous route on failure. */
+    fun rerouteNow() {
+        val dest = RideState.destination.value ?: return
+        val me = RideState.me.value ?: return
+        if (reroute.inProgress) return
+        if (!reroute.start(P(me.latitude, me.longitude), dest)) return
+        RideState.navStatus.value = "Off route – recalculating"
+        val myToken = navToken++
+        rerouteScope.launch {
+            val from = reroute.lastOrigin ?: P(me.latitude, me.longitude)
+            val fetched = Net.route(from, dest)
+            if (fetched == null) {
+                withContext(Dispatchers.Main) { RideState.navStatus.value = "Unable to recalculate – retrying" }
+                return@launch
+            }
+            val accepted = withContext(Dispatchers.Main) { navToken == myToken && reroute.onResponse(fetched, from, dest) }
+            if (!accepted) return@launch
+            withContext(Dispatchers.Main) { applyReroute(fetched) }
+        }
+    }
+
+    /** Accepts a freshly fetched route: replaces the active route, resets matching and re-renders. */
+    fun applyReroute(pts: List<P>) {
+        RideState.route.value = Route(pts)
+        RideState.previewRoute.value = pts
+        reroute.currentRoute = pts
+        matchRoute = null; matchS = null
+        RideState.navStatus.value = "New route found"
+        push()
+    }
+
+    /** Clears rerouting state (ride ended or destination cleared). */
+    fun resetReroute() { reroute.reset(); RideState.navStatus.value = "Navigating" }
 }
 
 /** Offline map areas (like Google Maps "download offline map"), using MapLibre's built-in offline manager. */
